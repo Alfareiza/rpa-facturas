@@ -1,0 +1,18 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "src/main.py",
+      "use": "@vercel/python",
+      "config": {
+        "runtime": "python3.12"
+      }
+    }
+  ],
+  "crons": [
+    {
+      "path": "/src/main",
+      "schedule": "*/3 * * * *"
+    }
+  ]
+}

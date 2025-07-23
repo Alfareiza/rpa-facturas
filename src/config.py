@@ -23,7 +23,7 @@ class Config:
         Folders will be created automatically
         """
 
-        TEMP = BASE_DIR / "temp"
+        TEMP =  Path('/tmp')
 
 
 CONFIG = Config()

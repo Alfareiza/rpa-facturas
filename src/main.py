@@ -1,4 +1,6 @@
-from src.config import log, BASE_DIR
+from http.server import BaseHTTPRequestHandler
+
+from src.config import log
 from src.constants import Reasons, Emails
 from src.decorators import production_only
 from src.models.general import Run, Record
@@ -15,6 +17,7 @@ class Process:
     Orchestrates the entire process of reading invoices from Gmail, uploading them to the Mutual Ser API,
     and logging the results.
     """
+
     def __init__(self):
         """
         Initializes the services required for the process and a Run object to track the execution.
@@ -108,23 +111,57 @@ class Process:
         df = self.run.make_df()
         self.gs.insert_dataframe(df)
 
-if __name__ == '__main__':
+
+def run_process():
+    """
+   Main execution function to be called by the cron job or for local testing.
+   """
     p = Process()
     try:
         p.read_inbox_and_upload_files()
-    except Exception as e:
+    except Exception:
         import traceback
 
         traceback.print_exc()
 
     try:
         p.register_in_sheets()
-    except Exception as e:
+    except Exception:
         import traceback
 
         traceback.print_exc()
 
-    for i, (nro, record) in enumerate(p.run.record.items(), 1):
-        print(f"{i}. {nro}: {record.email.subject}")
 
+class handler(BaseHTTPRequestHandler):
+    """
+    Vercel Serverless Function handler.
+    This function is triggered by the cron job defined in vercel.json.
+    """
 
+    def do_GET(self):
+        log.info("CRON JOB TRIGGERED: Starting invoice processing.")
+        try:
+            run_process()
+
+            log.info("CRON JOB FINISHED: Process completed successfully.")
+
+            # Respond to Vercel that the job was successful
+            self.send_response(200)
+            self.send_header('Content-type', 'text/plain')
+            self.end_headers()
+            self.wfile.write(b"Process completed successfully.")
+
+        except Exception as e:
+            log.error(f"An error occurred during the cron job execution: {e}", exc_info=True)
+
+            # Respond with an error status
+            self.send_response(500)
+            self.send_header('Content-type', 'text/plain')
+            self.end_headers()
+            self.wfile.write(f"An error occurred: {e}".encode('utf-8'))
+
+        return
+
+# if __name__ == '__main__':
+# for i, (nro, record) in enumerate(p.run.record.items(), 1):
+#     print(f"{i}. {nro}: {record.email.subject}")
