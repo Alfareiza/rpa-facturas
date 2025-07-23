@@ -141,8 +141,6 @@ if __name__ == '__main__':
     scheduler = BlockingScheduler()
     # Schedule the job to run every 5 minutes.
     scheduler.add_job(run_process, 'interval', minutes=5, id='invoice_processing_job')
-    # To run the first job immediately without waiting for the first 5-minute interval
-    run_process()
     try:
         # This will start the scheduler and block forever until the script is stopped.
         scheduler.start()
