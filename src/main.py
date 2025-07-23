@@ -1,4 +1,6 @@
-from src.config import log, BASE_DIR
+from apscheduler.schedulers.blocking import BlockingScheduler
+
+from src.config import log
 from src.constants import Reasons, Emails
 from src.decorators import production_only
 from src.models.general import Run, Record
@@ -15,6 +17,7 @@ class Process:
     Orchestrates the entire process of reading invoices from Gmail, uploading them to the Mutual Ser API,
     and logging the results.
     """
+
     def __init__(self):
         """
         Initializes the services required for the process and a Run object to track the execution.
@@ -82,7 +85,7 @@ class Process:
         2. Upload the invoice to Google Drive.
         3. Set the status for report purposes.
         """
-        log.info(f"{message.id} {message.nro_factura} Cargando factura en Drive")
+        log.info(f"{message.id} {message.nro_factura}_{message.valor_factura}.pdf siendo cargado en Drive")
         self.gmail.mark_as_read(message.id)
         self.run.record[message.nro_factura].status = Reasons.UPLOADED_MUTUAL_SER
         self.drive.upload_file(message.extract_and_rename_pdf(), self.drive.facturas_pdf)
@@ -108,7 +111,13 @@ class Process:
         df = self.run.make_df()
         self.gs.insert_dataframe(df)
 
-if __name__ == '__main__':
+
+def run_process():
+    """
+    Main execution function that orchestrates the entire process.
+    This is the function that will be scheduled by Rocketry.
+    """
+    log.info("SCHEDULER: Starting a new invoice processing run.")
     p = Process()
     try:
         p.read_inbox_and_upload_files()
@@ -123,8 +132,21 @@ if __name__ == '__main__':
         import traceback
 
         traceback.print_exc()
-
-    for i, (nro, record) in enumerate(p.run.record.items(), 1):
-        print(f"{i}. {nro}: {record.email.subject}")
+    log.info("SCHEDULER: Invoice processing run finished.")
 
 
+if __name__ == '__main__':
+    # for i, (nro, record) in enumerate(p.run.record.items(), 1):
+    #     print(f"{i}. {nro}: {record.email.subject}")
+
+    scheduler = BlockingScheduler()
+    # Schedule the job to run every 5 minutes.
+    scheduler.add_job(run_process, 'interval', minutes=5, id='invoice_processing_job')
+    # To run the first job immediately without waiting for the first 5-minute interval
+    run_process()
+    try:
+        # This will start the scheduler and block forever until the script is stopped.
+        scheduler.start()
+    except (KeyboardInterrupt, SystemExit):
+        log.info("Scheduler stopped by user.")
+        scheduler.shutdown()

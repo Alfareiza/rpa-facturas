@@ -1,3 +1,4 @@
+APScheduler
 requests
 fake-useragent
 pydantic
