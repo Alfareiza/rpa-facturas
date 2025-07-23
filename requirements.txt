@@ -1,0 +1,15 @@
+requests
+fake-useragent
+pydantic
+beautifulsoup4
+lxml
+imap-tools
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib
+gspread
+gspread-dataframe
+gspread-formatting
+pandas
+tenacity
+python-decouple

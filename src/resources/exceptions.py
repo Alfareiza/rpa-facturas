@@ -1,0 +1,3 @@
+class FacturaCargadaSinExito(Exception):
+    """Exception raised when the invoice was uploaded, but we got an error as response."""
+    ...
