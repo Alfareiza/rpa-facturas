@@ -17,7 +17,6 @@ class Process:
     Orchestrates the entire process of reading invoices from Gmail, uploading them to the Mutual Ser API,
     and logging the results.
     """
-
     def __init__(self):
         """
         Initializes the services required for the process and a Run object to track the execution.

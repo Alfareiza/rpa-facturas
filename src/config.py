@@ -24,6 +24,7 @@ class Config:
         """
 
         TEMP = Path("/tmp")
+        TEMP =  Path('/tmp')
 
 
 CONFIG = Config()
