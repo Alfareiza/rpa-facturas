@@ -35,7 +35,7 @@ def _token_required(func):
     def wrapper(client_instance: 'MutualSerAPIClient', *args, **kwargs):
         # If we have never logged in, do it first.
         if not client_instance.access_token:
-            # log.info("No token found. Performing initial login.")
+            log.info("No token found. Performing initial login.")
             client_instance.login()
 
         try:

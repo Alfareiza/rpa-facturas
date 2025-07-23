@@ -74,7 +74,7 @@ class Process:
                 self.finish(message)
             finally:
                 message.delete_files()
-                if idx == 1:
+                if idx == 100:
                     break
 
     def finish(self, message: EmailMessage):
@@ -140,7 +140,7 @@ if __name__ == '__main__':
 
     scheduler = BlockingScheduler()
     # Schedule the job to run every 5 minutes.
-    scheduler.add_job(run_process, 'interval', minutes=5, id='invoice_processing_job')
+    scheduler.add_job(run_process, 'interval', minutes=60, id='invoice_processing_job')
     try:
         # This will start the scheduler and block forever until the script is stopped.
         scheduler.start()

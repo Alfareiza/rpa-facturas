@@ -23,7 +23,6 @@ class Config:
         Folders will be created automatically
         """
 
-        TEMP = Path("/tmp")
         TEMP =  Path('/tmp')
 
 
