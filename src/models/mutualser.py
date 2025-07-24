@@ -77,6 +77,10 @@ class FindLoadResponse(BaseModel):
     nombreOrganizacion: Optional[str]
 
     @property
+    def cargue_id(self):
+        return str(self.id) if self.id else ""
+
+    @property
     def primer_archivo(self):
         return self.archivos[0]
 

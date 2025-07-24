@@ -382,8 +382,8 @@ class MutualSerAPIClient:
                 # log.info(f"Status is still 'EN_PROCESO'. Waiting for {delay_seconds} seconds before retrying.")
                 time.sleep(delay_seconds)
 
-        raise ValueError(
-            f"Después de {max_retries} 10 intentos, no se cargó la factura. Último estado de API fue {resp_obj.estado_basado_en_archivos!r}")
+        raise ValueError(f"Después de {max_retries} intentos, no se cargó la factura. "
+                         f"Último estado de API fue {resp_obj.estado_basado_en_archivos!r}.")
 
     @production_only
     def upload_file(self, filepath: Path) -> FindLoadResponse | None:

@@ -103,7 +103,7 @@ class Process:
         self.gmail.send_email(to=Emails.LOGIFARMA_ADMIN,
                               subject=subject,
                               body_vars={'nro_factura': record_id, 'reason': reason})
-        log.info(f"{record_id} E-mail enviado notificando que incosistencia: {reason}")
+        log.info(f"{record_id} E-mail enviado notificando incosistencia: {reason}")
 
     @production_only
     def register_in_sheets(self):
@@ -141,11 +141,11 @@ def run_process():
 if __name__ == '__main__':
     # for i, (nro, record) in enumerate(p.run.record.items(), 1):
     #     print(f"{i}. {nro}: {record.email.subject}")
-    run_process()
-    # scheduler = BlockingScheduler()
-    # scheduler.add_job(run_process, 'interval', minutes=60, id='invoice_processing_job')
-    # try:
-    #     scheduler.start()
-    # except (KeyboardInterrupt, SystemExit):
-    #     log.info("Scheduler stopped by user.")
-    #     scheduler.shutdown()
+    # run_process()
+    scheduler = BlockingScheduler()
+    scheduler.add_job(run_process, 'interval', minutes=60, id='invoice_processing_job')
+    try:
+        scheduler.start()
+    except (KeyboardInterrupt, SystemExit):
+        log.info("Scheduler stopped by user.")
+        scheduler.shutdown()
