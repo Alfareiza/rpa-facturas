@@ -337,7 +337,7 @@ class MutualSerAPIClient:
         return response
 
     @_token_required
-    def find_load_status(self, max_retries: int = 10, delay_seconds: int = 1) -> FindLoadResponse:
+    def find_load_status(self, max_retries: int = 10, delay_seconds: int = 6) -> FindLoadResponse:
         """
         Polls the findLoad endpoint to check the status of the file upload.
 
