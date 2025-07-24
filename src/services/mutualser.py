@@ -383,7 +383,7 @@ class MutualSerAPIClient:
                 time.sleep(delay_seconds)
 
         raise ValueError(
-            f"Upload status did not complete after {max_retries} retries. Last status: {resp_obj.estado_basado_en_archivos}")
+            f"Después de {max_retries} 10 intentos, no se cargó la factura. Último estado de API fue {resp_obj.estado_basado_en_archivos!r}")
 
     @production_only
     def upload_file(self, filepath: Path) -> FindLoadResponse | None:
@@ -416,3 +416,13 @@ class MutualSerAPIClient:
 if __name__ == "__main__":
     api_client = MutualSerAPIClient()
     api_client.upload_file(BASE_DIR / 'LGFM1590904_900073223.zip')
+
+    """
+07-24 01:06:22,652 - INFO    [main.py                  :037 -                     get_emails()] - 19839b1bd1368239 INICIANDO. Leyendo e-mail y descargando adjunto
+07-24 01:06:22,890 - INFO    [main.py                  :065 -    read_inbox_and_upload_files()] - 19839b1bd1368239 LGFM1592302 30 Enviando a Mutual Ser
+07-24 01:06:23,056 - INFO    [mutualser.py             :266 -               upload_rips_file()] - Submitting upload record for file: /tmp/LGFM1592302_900073223.zip
+07-24 01:06:23,231 - INFO    [mutualser.py             :305 -               upload_to_google()] - Uploading to Google URL for file.
+07-24 01:06:27,343 - INFO    [mutualser.py             :405 -                    upload_file()] - Final upload status details 7e427d03-d335-491e-97b9-2322d516d875: {"archivos":[{"codigo":"202507240106230561.zip","estado":"CARGADO","extension":"zip","fechaCargue":"2025-07-24T01:06:23.650000Z","id":"93ea87f1-1cb7-4b80-b79a-20d44a86c656","idTipo":"1da64d49-f5f7-4d70-8a7c-640db4816521","mensajes":[],"nombre":"/tmp/LGFM1592302_900073223.zip"}],"cantidad":1,"email":"facturacion@logifarma.co","estado":"TERMINADO","estadoValidaciones":null,"fecha":"2025-07-24T01:06:23.180000Z","id":"7e427d03-d335-491e-97b9-2322d516d875","nombres":["/tmp/LGFM1592302_900073223.zip"],"organizacion":"900073223","usuario":"facturacion@logifarma.co","nombreOrganizacion":null}
+07-24 01:06:27,352 - INFO    [main.py                  :087 -                         finish()] - 19839b1bd1368239 LGFM1592302_58050.pdf siendo cargado en Drive
+07-24 01:06:29,122 - INFO    [main.py                  :091 -                         finish()] - 19839b1bd1368239 LGFM1592302 FINALIZADO
+    """

@@ -1,11 +1,8 @@
-import logging
 from pathlib import Path
 from typing import List, Optional
 from pydantic import BaseModel, HttpUrl, RootModel
 from datetime import datetime
 from uuid import UUID
-
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 class Mensaje(BaseModel):
@@ -57,7 +54,6 @@ class Archivo(BaseModel):
 
     def exitoso(self):
         if self.mensajes and (mensaje := self.mensajes[0]):
-            logging.info(f"Exitoso por que el tipo de mensaje es: {mensaje.tipo}")
             return mensaje.tipo == ''
 
     @property

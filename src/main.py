@@ -1,10 +1,11 @@
 from apscheduler.schedulers.blocking import BlockingScheduler
 
 from src.config import log
-from src.constants import Reasons, Emails
+from src.constants import Reasons, Emails, Subjects
 from src.decorators import production_only
 from src.models.general import Run, Record
 from src.models.google import EmailMessage
+from src.models.mutualser import FindLoadResponse
 from src.resources.exceptions import FacturaCargadaSinExito
 from src.services.drive import GoogleDrive
 from src.services.gmail import GmailAPIReader
@@ -50,7 +51,7 @@ class Process:
         Raises:
             FacturaCargadaSinExito: If the upload to the Mutual Ser API fails.
         """
-        response = self.mutualser_client.upload_file(message.attachment_path)
+        response: FindLoadResponse = self.mutualser_client.upload_file(message.attachment_path)
         self.run.record[message.nro_factura].response_mutualser = response
         if not response.cargado_exitoso:
             raise FacturaCargadaSinExito(response.unico_archivo.motivo_error)
@@ -98,8 +99,11 @@ class Process:
         """
         self.run.record[record_id].status = Reasons.INVOCE_UPLOADED_WITH_ERROR
         self.run.record[record_id].errors.append(reason)
-        self.gmail.send_email(to=Emails.LOGIFARMA_ADMIN, subject=f"Error cargando factura {record_id} en Mutual Ser",
+        subject = Subjects.define_subject(record_id, reason)
+        self.gmail.send_email(to=Emails.LOGIFARMA_ADMIN,
+                              subject=subject,
                               body_vars={'nro_factura': record_id, 'reason': reason})
+        log.info(f"{record_id} E-mail enviado notificando que incosistencia: {reason}")
 
     @production_only
     def register_in_sheets(self):
