@@ -141,13 +141,11 @@ def run_process():
 if __name__ == '__main__':
     # for i, (nro, record) in enumerate(p.run.record.items(), 1):
     #     print(f"{i}. {nro}: {record.email.subject}")
-
-    scheduler = BlockingScheduler()
-    # Schedule the job to run every 5 minutes.
-    scheduler.add_job(run_process, 'interval', minutes=60, id='invoice_processing_job')
-    try:
-        # This will start the scheduler and block forever until the script is stopped.
-        scheduler.start()
-    except (KeyboardInterrupt, SystemExit):
-        log.info("Scheduler stopped by user.")
-        scheduler.shutdown()
+    run_process()
+    # scheduler = BlockingScheduler()
+    # scheduler.add_job(run_process, 'interval', minutes=60, id='invoice_processing_job')
+    # try:
+    #     scheduler.start()
+    # except (KeyboardInterrupt, SystemExit):
+    #     log.info("Scheduler stopped by user.")
+    #     scheduler.shutdown()
