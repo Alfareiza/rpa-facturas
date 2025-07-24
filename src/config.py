@@ -8,7 +8,7 @@ _IN_PRODUCTION = config('PRODUCTION', default=False, cast=bool)
 _TEST_MODE = config('TEST_MODE', default=False, cast=bool)
 
 # format = r"%(asctime)s - %(levelname)-7s [%(filename)s:%(lineno)03d - %(funcName)34s()] - %(message)s"
-format = r"%(asctime)s - %(levelname)-7s [%(filename)-20s:%(lineno)03d - %(funcName)30s()] - %(message)s"
+format = r"%(asctime)s - %(levelname)-7s [%(filename)-13s:%(lineno)03d - %(funcName)30s()] - %(message)s"
 logging.basicConfig(level=logging.INFO, format=format)
 for noisy_logger in ["google_auth_httplib2", "googleapiclient"]:
     logging.getLogger(noisy_logger).setLevel(logging.WARNING)

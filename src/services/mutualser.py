@@ -22,6 +22,7 @@ from src.models.mutualser import FileLinkRequest, FileLinkResponse, UploadFilesR
 
 from src.constants import LOGI_NIT, MUTUALSER_USERNAME, MUTUALSER_PASSWORD, BASE_URL_AUTH, BASE_URL_API, PORTAL_URL, \
     USER_ID
+from src.resources.files import extract_nro_factura_from_file
 
 
 def _token_required(func):
@@ -263,7 +264,7 @@ class MutualSerAPIClient:
             tipo_id (str): The ID of the file type, obtained from `get_config_info`.
             file_name (Path): The name of the file being uploaded (e.g., 'LGFM1574927_900073223.zip').
         """
-        log.info(f"Submitting upload record for file: {file_name}")
+        # log.info(f"Submitting upload record for file: {file_name}")
 
         payload = {
             'id_cargue': self.transaction_id,
@@ -302,7 +303,7 @@ class MutualSerAPIClient:
     @_token_required
     def upload_to_google(self, file_path: Path, gurl: str):
         """Upload file to google based on URL to be requested."""
-        log.info(f"Uploading to Google URL for file.")
+        log.info(f"{extract_nro_factura_from_file(file_path)} Cargando archivo {file_path.name} en Mutual Ser")
         # self._update_api_headers({"Content-Type": "application/x-www-form-urlencoded"})
         with open(file_path, 'rb') as file:
             file_content = file.read()
@@ -390,20 +391,21 @@ class MutualSerAPIClient:
     def upload_file(self, filepath: Path) -> FindLoadResponse | None:
         """Main function to upload the file into Mutual Ser."""
         try:
-            # 2. Directly call a protected method. The decorator handles login automatically.
+            # 1. Directly call a protected method. The decorator handles login automatically.
             tipo_id = self.get_config_info()
-            # 3. Upload the RIPS file information
+            # 2. Upload the RIPS file information
             self.upload_rips_file(tipo_id=tipo_id, file_name=filepath)
-            # 4. Get the URL necessary to upload the file to Google
+            # 3. Get the URL necessary to upload the file to Google
             url_google_file = self.get_url_upload_file()
-            # 5. Upload file to google based on URL to be requested
+            # 4. Upload file to google based on URL to be requested
             self.upload_to_google(filepath, url_google_file.root[f"{self.codigo}.zip"])
-            # 6. Uploads the file to the API
+            # 5. Uploads the file to the API
             self.upload_files(tipo_id=tipo_id, file_name=filepath)
-            # 7. Poll for the final status of the upload
+            # 6. Poll for the final status of the upload
             final_response = self.find_load_status()
-            # 8. Poll for the final status of the upload
-            log.info(f"Final upload status details {final_response.id}: {final_response.model_dump_json()}")
+            # 7. Poll for the final status of the upload
+            log.info(f"{extract_nro_factura_from_file(filepath)} Archivo cargado "
+                     f"con ID de cargue: {final_response.id}: {final_response.model_dump_json()}")
         except (RequestException, ValueError, AttributeError) as e:
             log.error(f"Could not complete the process: {e}")
             raise
@@ -417,13 +419,3 @@ class MutualSerAPIClient:
 if __name__ == "__main__":
     api_client = MutualSerAPIClient()
     api_client.upload_file(BASE_DIR / 'LGFM1590904_900073223.zip')
-
-    """
-07-24 01:06:22,652 - INFO    [main.py                  :037 -                     get_emails()] - 19839b1bd1368239 INICIANDO. Leyendo e-mail y descargando adjunto
-07-24 01:06:22,890 - INFO    [main.py                  :065 -    read_inbox_and_upload_files()] - 19839b1bd1368239 LGFM1592302 30 Enviando a Mutual Ser
-07-24 01:06:23,056 - INFO    [mutualser.py             :266 -               upload_rips_file()] - Submitting upload record for file: /tmp/LGFM1592302_900073223.zip
-07-24 01:06:23,231 - INFO    [mutualser.py             :305 -               upload_to_google()] - Uploading to Google URL for file.
-07-24 01:06:27,343 - INFO    [mutualser.py             :405 -                    upload_file()] - Final upload status details 7e427d03-d335-491e-97b9-2322d516d875: {"archivos":[{"codigo":"202507240106230561.zip","estado":"CARGADO","extension":"zip","fechaCargue":"2025-07-24T01:06:23.650000Z","id":"93ea87f1-1cb7-4b80-b79a-20d44a86c656","idTipo":"1da64d49-f5f7-4d70-8a7c-640db4816521","mensajes":[],"nombre":"/tmp/LGFM1592302_900073223.zip"}],"cantidad":1,"email":"facturacion@logifarma.co","estado":"TERMINADO","estadoValidaciones":null,"fecha":"2025-07-24T01:06:23.180000Z","id":"7e427d03-d335-491e-97b9-2322d516d875","nombres":["/tmp/LGFM1592302_900073223.zip"],"organizacion":"900073223","usuario":"facturacion@logifarma.co","nombreOrganizacion":null}
-07-24 01:06:27,352 - INFO    [main.py                  :087 -                         finish()] - 19839b1bd1368239 LGFM1592302_58050.pdf siendo cargado en Drive
-07-24 01:06:29,122 - INFO    [main.py                  :091 -                         finish()] - 19839b1bd1368239 LGFM1592302 FINALIZADO
-    """

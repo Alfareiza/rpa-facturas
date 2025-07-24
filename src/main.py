@@ -1,4 +1,7 @@
+from datetime import datetime
+
 from apscheduler.schedulers.blocking import BlockingScheduler
+from pytz import timezone
 
 from src.config import log
 from src.constants import Reasons, Emails, Subjects
@@ -35,7 +38,7 @@ class Process:
         """
         messages = self.gmail.read_inbox()
         for message in messages:
-            log.info(f"{message.id} INICIANDO. Leyendo e-mail y descargando adjunto")
+            log.info(f"{message.id} INICIANDO Leyendo e-mail y descargando adjunto")
             self.gmail.fetch_email_details(message)
             self.run.record[message.nro_factura] = Record(email=message)
             self.gmail.download_attachment(message)
@@ -56,7 +59,7 @@ class Process:
         if not response.cargado_exitoso:
             raise FacturaCargadaSinExito(response.unico_archivo.motivo_error)
 
-    def read_inbox_and_upload_files(self):
+    def read_email_send_invoice(self):
         """
         Main workflow that iterates through emails from the inbox, attempts to upload the invoice for each,
         and handles the outcome. Successful uploads are finalized, and failures are logged.
@@ -75,7 +78,8 @@ class Process:
                 self.finish(message)
             finally:
                 message.delete_files()
-                if idx == 100:
+                log.info(f"{20 * '=='}\n")
+                if idx == 200:
                     break
 
     def finish(self, message: EmailMessage):
@@ -120,22 +124,27 @@ def run_process():
     Main execution function that orchestrates the entire process.
     This is the function that will be scheduled by Rocketry.
     """
-    log.info("SCHEDULER: Starting a new invoice processing run.")
-    p = Process()
-    try:
-        p.read_inbox_and_upload_files()
-    except Exception as e:
-        import traceback
+    moment = datetime.now(tz=timezone("America/Bogota"))
+    if moment.hour == 20 and moment.minute >= 0 or moment.hour < 7:
+        ...
+        log.info("SCHEDULER: Procesamiento de facturas deshabilitado en este horario. El programa no se ejecutará por ahora")
+    else:
+        log.info("SCHEDULER: Iniciando nuevo procesamiento de facturas.")
+        p = Process()
+        try:
+            p.read_email_send_invoice()
+        except Exception as e:
+            import traceback
 
-        traceback.print_exc()
+            traceback.print_exc()
 
-    try:
-        p.register_in_sheets()
-    except Exception as e:
-        import traceback
+        try:
+            p.register_in_sheets()
+        except Exception as e:
+            import traceback
 
-        traceback.print_exc()
-    log.info("SCHEDULER: Invoice processing run finished.")
+            traceback.print_exc()
+        log.info("SCHEDULER: Procesamiento de facturas finalizada.")
 
 
 if __name__ == '__main__':

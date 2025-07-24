@@ -37,7 +37,7 @@ class Reasons:
 
 class Subjects:
     BASIC = "{nro_factura} - Error cargando factura en Mutual Ser"
-    INCONSISTENCY_TOTAL_INVOICE = "{nro_factura} - Inconsistencia en valor total de la factura"
+    INCONSISTENCY_TOTAL_INVOICE = "{nro_factura} - Factura rechazada por Mutual ser debido a inconsistencia en valor total de la factura"
     RETRY_FAILED = "{nro_factura} - No se pudo cargar la factura después de varios intentos"
 
     @classmethod
