@@ -383,7 +383,8 @@ class MutualSerAPIClient:
                 time.sleep(delay_seconds)
 
         raise ValueError(f"Después de {max_retries} intentos, no se cargó la factura. "
-                         f"Último estado de API fue {resp_obj.estado_basado_en_archivos!r}.")
+                         f"Último estado de API fue {resp_obj.estado_basado_en_archivos!r}. "
+                         f"El ID de Cargue es {self.transaction_id}.")
 
     @production_only
     def upload_file(self, filepath: Path) -> FindLoadResponse | None:
