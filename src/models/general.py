@@ -33,7 +33,7 @@ class Record(BaseModel):
         """Converts the record to a pandas DataFrame."""
         return DataFrame({
             'Factura': [self.email.nro_factura],
-            'ID de cargue': [self.response_mutualser.cargue_id],
+            'ID de cargue': [self.response_mutualser.cargue_id if self.response_mutualser else ""],
             'Total': [self.email.valor_factura],
             'Status': [self.status],
             'Errores': [", ".join(map(str, self.errors))],
