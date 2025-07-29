@@ -1,5 +1,7 @@
 import base64
 import ssl
+from datetime import datetime
+from email.utils import formataddr
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
@@ -47,11 +49,11 @@ class GmailAPIReader:
         return self.service.users().messages().attachments().get(
             userId='me', messageId=message_id, id=attachment_id).execute()
 
-    def read_inbox(self) -> List[EmailMessage]:
+    def read_inbox(self, limit: int) -> List[EmailMessage]:
         """Reads the inbox and returns a list of EmailMessage objects."""
         all_messages = []
         next_page_token = None
-        while len(all_messages) < 200:
+        while len(all_messages) < limit:
             results = self._list_messages(
                 query=f'is:unread subject:"{LOGI_NIT};LOGIFARMA SAS;"',
                 next_page_token=next_page_token
@@ -61,7 +63,7 @@ class GmailAPIReader:
             next_page_token = results.get('nextPageToken')
             if not next_page_token:
                 break
-        return all_messages[:200]
+        return all_messages[:limit]
 
     def fetch_email_details(self, message: EmailMessage) -> None:
         """Fetches the details of an email and updates the EmailMessage object."""
@@ -74,6 +76,8 @@ class GmailAPIReader:
                 message.subject = header['value']
             if header['name'] == 'To':
                 message.recipient = header['value']
+            if header['name'] == 'Date':
+                message.received_at = datetime.strptime(header['value'], '%a, %d %b %Y %H:%M:%S %z')
 
         if 'parts' in payload:
             for part in payload['parts']:
@@ -107,7 +111,12 @@ class GmailAPIReader:
             body={'removeLabelIds': ['UNREAD']}
         ).execute()
 
-    def send_email(self, to: str, subject: str, body_vars: Dict[str, Any], cc: Optional[str] = None, bcc: Optional[str] = None, template_path: Optional[str] = None) -> None:
+    @retry(stop=stop_after_attempt(10), wait=wait_fixed(1), reraise=True)
+    def send(self, body) -> None:
+        """"Perform the sent of the email."""
+        self.service.users().messages().send(userId="me", body=body).execute()
+
+    def send_email(self, to: str, subject: str, body_vars: Dict[str, Any], cc: Optional[str] = None, bcc: Optional[str] = None, template_path: Optional[str] = None, attachment_file: Optional[Path] = None) -> None:
         """
         Sends an email using a rendered HTML template.
 
@@ -118,6 +127,7 @@ class GmailAPIReader:
             cc (Optional[str], optional): CC recipient(s). Defaults to None.
             bcc (Optional[str], optional): BCC recipient(s). Defaults to None.
             template_path (Optional[str], optional): Path to the HTML template. Defaults to a constant if not provided.
+            attachment_file (Optional[Path], optional): Path to the attachment file. Defaults to None.
 
         Raises:
             FileNotFoundError: If the template file does not exist.
@@ -130,7 +140,7 @@ class GmailAPIReader:
         if template_path is None:
             template_path = BASE_DIR / "src" / "resources" / "error_con_factura.html"
 
-        if not bcc:
+        if bcc is None:
             bcc = Emails.LOGIFARMA_DEV
 
         template_file = Path(template_path)
@@ -145,21 +155,24 @@ class GmailAPIReader:
         message = MIMEMultipart()
         message["to"] = to
         message["subject"] = subject
+        # message["From"] = formataddr(("Facturas a Mutualser", "fevmutualser@logifarma.co"))
         if cc:
             message["cc"] = cc
         if bcc:
             message["bcc"] = bcc
         message.attach(MIMEText(html_body, "html"))
 
+        if attachment_file.exists():
+            from email.mime.application import MIMEApplication
+            with open(attachment_file, 'rb') as f:
+                part = MIMEApplication(f.read(), Name=attachment_file.name)
+            part['Content-Disposition'] = f'attachment; filename="{attachment_file.name}"'
+            message.attach(part)
+
         raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
         body = {"raw": raw_message}
 
-        try:
-            self.service.users().messages().send(userId="me", body=body).execute()
-        except ssl.SSLEOFError as e:
-            raise Exception(f"Failed to send email: {e}")
-        except Exception as e:
-            raise Exception(f"Failed to send email: {e}")
+        self.send(body)
 
 
 if __name__ == '__main__':

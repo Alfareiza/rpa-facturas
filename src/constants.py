@@ -31,17 +31,17 @@ FACTURAS_TMP = config('FACTURAS_TMP')
 
 class Reasons:
     FILE_NOT_FOUND_MUTUAL_SER = 'Archivo no encontrado al intentar ser enviado a Mutualser'
-    UPLOADED_MUTUAL_SER = 'Cargado en Mutual Ser'
-    INVOCE_UPLOADED_WITH_ERROR = 'Factura NO CARGADA en Mutual Ser'
+    UPLOADED_MUTUAL_SER = 'Cargado en Mutualser'
+    INVOCE_UPLOADED_WITH_ERROR = 'Factura NO CARGADA en Mutualser'
 
 
 class Subjects:
-    BASIC = "{nro_factura} - Error cargando factura en Mutual Ser"
-    INCONSISTENCY_TOTAL_INVOICE = "{nro_factura} - Factura rechazada por Mutual ser debido a inconsistencia en valor total de la factura"
+    BASIC = "{nro_factura} - Error cargando factura en Mutualser"
+    INCONSISTENCY_TOTAL_INVOICE = "{nro_factura} (del {fecha_factura}) - Factura rechazada por Mutualser por inconsistencia en el valor total"
     RETRY_FAILED = "{nro_factura} - No se pudo cargar la factura después de varios intentos"
 
     @classmethod
-    def define_subject(cls, nro_factura: str, reason: str):
+    def define_subject(cls, nro_factura: str, reason: str, fecha_factura: str) -> str:
         """Determines the appropriate subject line for a notification email based on the invoice number and reason.
 
         Returns a formatted subject string that reflects the context of the invoice error or inconsistency.
@@ -49,12 +49,13 @@ class Subjects:
         Args:
             nro_factura (str): The invoice number.
             reason (str): The reason for the notification.
+            fecha_factura (str): The date of the invoice.
 
         Returns:
             str: The formatted subject line for the email.
         """
         if 'corresponde al valor total del servicio' in reason.lower():
-            return cls.INCONSISTENCY_TOTAL_INVOICE.format(nro_factura=nro_factura)
+            return cls.INCONSISTENCY_TOTAL_INVOICE.format(nro_factura=nro_factura, fecha_factura=fecha_factura)
         if 'intentos, no se cargó la factura' in reason.lower():
             return cls.RETRY_FAILED.format(nro_factura=nro_factura)
         return cls.BASIC.format(nro_factura=nro_factura)

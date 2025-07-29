@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from src.config import CONFIG
 from src.constants import LOGI_NIT
+from src.resources.datetimes import convert_utc_to_utc_minus_5
 from src.resources.files import delete_file_if_exists
 
 
@@ -16,7 +17,7 @@ class EmailMessage(BaseModel):
     thread_id: str = Field(alias='threadId')
     subject: Optional[str] = None
     seen: bool = False
-    received_time: Optional[datetime] = None
+    received_at: Optional[datetime] = None
     body_html: Optional[str] = None
     recipient: Optional[str] = None
     attachment_path: Optional[Path] = None
@@ -52,6 +53,20 @@ class EmailMessage(BaseModel):
             except IndexError:
                 return None
         return None
+
+    @property
+    def fecha_factura(self) -> Optional[str]:
+        """Convert the date to a UTC-5 date and return it as string"""
+        if self.received_at:
+            return f"{convert_utc_to_utc_minus_5(self.received_at):%d/%m/%Y}"
+        return ""
+
+    @property
+    def momento_factura(self) -> Optional[str]:
+        """Convert the date to a UTC-5 date and return it as string with the time."""
+        if self.received_at:
+            return f"{convert_utc_to_utc_minus_5(self.received_at):%d/%m/%Y %H:%M:%S}"
+        return ""
 
     @property
     def zip_name(self) -> Optional[str]:

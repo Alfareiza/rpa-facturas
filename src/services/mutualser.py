@@ -303,7 +303,7 @@ class MutualSerAPIClient:
     @_token_required
     def upload_to_google(self, file_path: Path, gurl: str):
         """Upload file to google based on URL to be requested."""
-        log.info(f"{extract_nro_factura_from_file(file_path)} Cargando archivo {file_path.name} en Mutual Ser")
+        log.info(f"{extract_nro_factura_from_file(file_path)} Cargando archivo {file_path.name} en Mutualser")
         # self._update_api_headers({"Content-Type": "application/x-www-form-urlencoded"})
         with open(file_path, 'rb') as file:
             file_content = file.read()
@@ -389,7 +389,7 @@ class MutualSerAPIClient:
 
     @production_only
     def upload_file(self, filepath: Path) -> FindLoadResponse | None:
-        """Main function to upload the file into Mutual Ser."""
+        """Main function to upload the file into Mutualser."""
         try:
             # 1. Directly call a protected method. The decorator handles login automatically.
             tipo_id = self.get_config_info()
