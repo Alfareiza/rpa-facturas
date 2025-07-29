@@ -153,11 +153,11 @@ def run_process():
 
             traceback.print_exc()
         ordered_records = p.run.order_by_fecha_factura()
-        first_record = ordered_records[0]
-        last_record = ordered_records[-1]
-        log.info(f"SCHEDULER: Primera Factura fue {first_record[0]} del {first_record[1].email.momento_factura}.")
-        log.info(f"SCHEDULER: Última Factura fue {last_record[0]} del {last_record[1].email.momento_factura}.")
-        log.info(f"SCHEDULER: Procesamiento de facturas finalizado en {diff_dates(moment, colombia_now())}.")
+        last_record = ordered_records[0]
+        first_record = ordered_records[-1]
+        log.info(f"REPORT: Primera Factura fue {first_record[0]} del {first_record[1].email.momento_factura}.")
+        log.info(f"REPORT: Última Factura fue {last_record[0]} del {last_record[1].email.momento_factura}.")
+        log.info(f"REPORT: Comenzó a las {moment:%T} y le tomó {diff_dates(moment, colombia_now())}.")
 
 
 if __name__ == '__main__':
