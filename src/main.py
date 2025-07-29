@@ -39,7 +39,7 @@ class Process:
         A generator that fetches unread emails from the inbox, downloads their attachments,
         and yields EmailMessage objects for further processing.
         """
-        messages = self.gmail.read_inbox(1)
+        messages = self.gmail.read_inbox(200)
         for message in messages:
             log.info(f"{message.id} INICIANDO Leyendo e-mail y descargando adjunto")
             self.gmail.fetch_email_details(message)
@@ -163,11 +163,11 @@ def run_process():
 if __name__ == '__main__':
     # for i, (nro, record) in enumerate(p.run.record.items(), 1):
     #     print(f"{i}. {nro}: {record.email.subject}")
-    run_process()
-    # scheduler = BlockingScheduler()
-    # scheduler.add_job(run_process, 'interval', minutes=60, id='invoice_processing_job')
-    # try:
-    #     scheduler.start()
-    # except (KeyboardInterrupt, SystemExit):
-    #     log.info("Scheduler stopped by user.")
-    #     scheduler.shutdown()
+    # run_process()
+    scheduler = BlockingScheduler()
+    scheduler.add_job(run_process, 'interval', minutes=60, id='invoice_processing_job')
+    try:
+        scheduler.start()
+    except (KeyboardInterrupt, SystemExit):
+        log.info("Scheduler stopped by user.")
+        scheduler.shutdown()
