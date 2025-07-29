@@ -1,4 +1,5 @@
 from datetime import datetime
+from pathlib import Path
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 from pytz import timezone
@@ -9,6 +10,7 @@ from src.decorators import production_only
 from src.models.general import Run, Record
 from src.models.google import EmailMessage
 from src.models.mutualser import FindLoadResponse
+from src.resources.datetimes import colombia_now, diff_dates
 from src.resources.exceptions import FacturaCargadaSinExito
 from src.services.drive import GoogleDrive
 from src.services.gmail import GmailAPIReader
@@ -18,9 +20,10 @@ from src.services.sheets import GSpreadSheets
 
 class Process:
     """
-    Orchestrates the entire process of reading invoices from Gmail, uploading them to the Mutual Ser API,
+    Orchestrates the entire process of reading invoices from Gmail, uploading them to the Mutualser API,
     and logging the results.
     """
+
     def __init__(self):
         """
         Initializes the services required for the process and a Run object to track the execution.
@@ -36,7 +39,7 @@ class Process:
         A generator that fetches unread emails from the inbox, downloads their attachments,
         and yields EmailMessage objects for further processing.
         """
-        messages = self.gmail.read_inbox()
+        messages = self.gmail.read_inbox(200)
         for message in messages:
             log.info(f"{message.id} INICIANDO Leyendo e-mail y descargando adjunto")
             self.gmail.fetch_email_details(message)
@@ -46,13 +49,13 @@ class Process:
 
     def send_invoice_to_mutual_ser(self, message: EmailMessage):
         """
-        Uploads the invoice file attached to an email to the Mutual Ser API.
+        Uploads the invoice file attached to an email to the Mutualser API.
 
         Args:
             message: The EmailMessage object containing the invoice attachment.
 
         Raises:
-            FacturaCargadaSinExito: If the upload to the Mutual Ser API fails.
+            FacturaCargadaSinExito: If the upload to the Mutualser API fails.
         """
         response: FindLoadResponse = self.mutualser_client.upload_file(message.attachment_path)
         self.run.record[message.nro_factura].response_mutualser = response
@@ -66,21 +69,19 @@ class Process:
         """
         for idx, message in enumerate(self.get_emails(), 1):
             try:
-                log.info(f"{message.id} {message.nro_factura} {idx} Enviando a Mutual Ser")
+                log.info(f"{message.id} {message.nro_factura} {message.fecha_factura} {idx} Enviando a Mutualser")
                 self.send_invoice_to_mutual_ser(message)
             except FileNotFoundError:
-                self.post_exception(message.nro_factura, Reasons.FILE_NOT_FOUND_MUTUAL_SER)
+                self.post_exception(message, Reasons.FILE_NOT_FOUND_MUTUAL_SER)
             except FacturaCargadaSinExito as e:
-                self.post_exception(message.nro_factura, str(e))
+                self.post_exception(message, str(e))
             except Exception as e:
-                self.post_exception(message.nro_factura, str(e))
+                self.post_exception(message, str(e))
             else:
                 self.finish(message)
             finally:
                 message.delete_files()
                 log.info(f"{20 * '=='}\n")
-                if idx == 200:
-                    break
 
     def finish(self, message: EmailMessage):
         """
@@ -93,21 +94,29 @@ class Process:
         self.gmail.mark_as_read(message.id)
         self.run.record[message.nro_factura].status = Reasons.UPLOADED_MUTUAL_SER
         self.drive.upload_file(message.extract_and_rename_pdf(), self.drive.facturas_pdf)
-        log.info(f"{message.id} {message.nro_factura} FINALIZADO")
+        log.info(f"{message.id} {message.nro_factura} {message.fecha_factura} FINALIZADO")
 
-    def post_exception(self, record_id: str, reason: str):
+    def post_exception(self, message: EmailMessage, reason: str):
         """Operations to be executed when an exception is raised.
 
-        :param record_id: Is the same `nro_factura` extracted from the EmailMessage instance.
+        :param message: EmailMessage object containing the invoice information.
         :param reason: Specific reason of failure.
         """
-        self.run.record[record_id].status = Reasons.INVOCE_UPLOADED_WITH_ERROR
-        self.run.record[record_id].errors.append(reason)
-        subject = Subjects.define_subject(record_id, reason)
+        self.run.record[message.nro_factura].status = Reasons.INVOCE_UPLOADED_WITH_ERROR
+        self.run.record[message.nro_factura].errors.append(reason)
+        self.send_mail(message, reason)
+
+    def send_mail(self, message: EmailMessage, reason: str):
+        """Send the email notifying the issue with the invoice."""
+        subject = Subjects.define_subject(message.nro_factura, reason, message.fecha_factura)
+        # bcc = '' if 'inconsistencia en valor total' in subject else None
         self.gmail.send_email(to=Emails.LOGIFARMA_ADMIN,
+                              # bcc=bcc,
                               subject=subject,
-                              body_vars={'nro_factura': record_id, 'reason': reason})
-        log.info(f"{record_id} E-mail enviado notificando incosistencia: {reason}")
+                              body_vars={'nro_factura': message.nro_factura, 'reason': reason,
+                                         'fecha_factura': message.fecha_factura},
+                              attachment_file=message.attachment_path)
+        log.info(f"{message.nro_factura} E-mail enviado notificando incosistencia: {reason}")
 
     @production_only
     def register_in_sheets(self):
@@ -124,10 +133,9 @@ def run_process():
     Main execution function that orchestrates the entire process.
     This is the function that will be scheduled by Rocketry.
     """
-    moment = datetime.now(tz=timezone("America/Bogota"))
-    if moment.hour == 20 and moment.minute >= 0 or moment.hour < 7:
-        ...
-        log.info("SCHEDULER: Procesamiento de facturas deshabilitado en este horario. El programa no se ejecutará por ahora")
+    moment = colombia_now()
+    if moment.hour > 20 and moment.minute >= 0 or moment.hour < 6:
+        log.info(f"SCHEDULER: Procesamiento de facturas deshabilitado en este horario ({moment:%D %r})")
     else:
         log.info("SCHEDULER: Iniciando nuevo procesamiento de facturas.")
         p = Process()
@@ -144,7 +152,7 @@ def run_process():
             import traceback
 
             traceback.print_exc()
-        log.info("SCHEDULER: Procesamiento de facturas finalizada.")
+        log.info(f"SCHEDULER: Procesamiento de facturas finalizado en {diff_dates(moment, colombia_now())}.")
 
 
 if __name__ == '__main__':
