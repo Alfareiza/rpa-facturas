@@ -39,7 +39,7 @@ class Process:
         A generator that fetches unread emails from the inbox, downloads their attachments,
         and yields EmailMessage objects for further processing.
         """
-        messages = self.gmail.read_inbox(200)
+        messages = self.gmail.read_inbox(1)
         for message in messages:
             log.info(f"{message.id} INICIANDO Leyendo e-mail y descargando adjunto")
             self.gmail.fetch_email_details(message)
@@ -152,17 +152,22 @@ def run_process():
             import traceback
 
             traceback.print_exc()
+        ordered_records = p.run.order_by_fecha_factura()
+        first_record = ordered_records[0]
+        last_record = ordered_records[-1]
+        log.info(f"SCHEDULER: Primera Factura fue {first_record[0]} del {first_record[1].email.momento_factura}.")
+        log.info(f"SCHEDULER: Última Factura fue {last_record[0]} del {last_record[1].email.momento_factura}.")
         log.info(f"SCHEDULER: Procesamiento de facturas finalizado en {diff_dates(moment, colombia_now())}.")
 
 
 if __name__ == '__main__':
     # for i, (nro, record) in enumerate(p.run.record.items(), 1):
     #     print(f"{i}. {nro}: {record.email.subject}")
-    # run_process()
-    scheduler = BlockingScheduler()
-    scheduler.add_job(run_process, 'interval', minutes=60, id='invoice_processing_job')
-    try:
-        scheduler.start()
-    except (KeyboardInterrupt, SystemExit):
-        log.info("Scheduler stopped by user.")
-        scheduler.shutdown()
+    run_process()
+    # scheduler = BlockingScheduler()
+    # scheduler.add_job(run_process, 'interval', minutes=60, id='invoice_processing_job')
+    # try:
+    #     scheduler.start()
+    # except (KeyboardInterrupt, SystemExit):
+    #     log.info("Scheduler stopped by user.")
+    #     scheduler.shutdown()

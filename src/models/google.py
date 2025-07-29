@@ -62,6 +62,13 @@ class EmailMessage(BaseModel):
         return ""
 
     @property
+    def momento_factura(self) -> Optional[str]:
+        """Convert the date to a UTC-5 date and return it as string with the time."""
+        if self.received_at:
+            return f"{convert_utc_to_utc_minus_5(self.received_at):%d/%m/%Y %H:%M:%S}"
+        return ""
+
+    @property
     def zip_name(self) -> Optional[str]:
         """Constructs the zip filename from the invoice number and customer NIT."""
         if self.nro_factura:

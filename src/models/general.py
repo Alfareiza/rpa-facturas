@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field, PrivateAttr
 
 from src.models.google import EmailMessage
 from src.models.mutualser import FindLoadResponse
+from src.resources.datetimes import convert_utc_to_utc_minus_5
 
 
 class Record(BaseModel):
@@ -29,18 +30,23 @@ class Record(BaseModel):
             super().__setattr__("finished_at", datetime.now())
         super().__setattr__(name, value)
 
+    @property
+    def finished_at_utc(self):
+        return convert_utc_to_utc_minus_5(self.finished_at)
+
     def to_dataframe(self) -> DataFrame:
         """Converts the record to a pandas DataFrame."""
         return DataFrame({
             'Factura': [self.email.nro_factura],
+            'Fecha Factura': [self.email.fecha_factura],
             'ID de cargue': [self.response_mutualser.cargue_id if self.response_mutualser else ""],
             'Total': [self.email.valor_factura],
             'Status': [self.status],
             'Errores': [", ".join(map(str, self.errors))],
-            'Día': [self.finished_at.strftime('%d')],
-            'Mes': [self.finished_at.strftime('%m')],
-            'Año': [self.finished_at.year],
-            'Momento': [f"{self.finished_at:%T}"]
+            'Día': [self.finished_at_utc.strftime('%d')],
+            'Mes': [self.finished_at_utc.strftime('%m')],
+            'Año': [self.finished_at_utc.year],
+            'Momento': [f"{self.finished_at_utc:%T}"]
         })
 
     class Config:
@@ -59,3 +65,7 @@ class Run(BaseModel):
     def make_df(self) -> DataFrame:
         """Generates a DataFrame from all the records."""
         return DataFrame()._append([record.to_dataframe() for record in self.record.values()][::-1], ignore_index=True)
+
+    def order_by_fecha_factura(self) -> list:
+        """Create a list based on record's information."""
+        return sorted(self.record.items(), key=lambda item: item[1].email.received_at, reverse=True)
