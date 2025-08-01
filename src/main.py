@@ -109,9 +109,9 @@ class Process:
     def send_mail(self, message: EmailMessage, reason: str):
         """Send the email notifying the issue with the invoice."""
         subject = Subjects.define_subject(message.nro_factura, reason, message.fecha_factura)
-        # bcc = '' if 'inconsistencia en valor total' in subject else None
+        bcc = '' if 'inconsistencia en el valor total' in subject else None
         self.gmail.send_email(to=Emails.LOGIFARMA_ADMIN,
-                              # bcc=bcc,
+                              bcc=bcc,
                               subject=subject,
                               body_vars={'nro_factura': message.nro_factura, 'reason': reason,
                                          'fecha_factura': message.fecha_factura},
