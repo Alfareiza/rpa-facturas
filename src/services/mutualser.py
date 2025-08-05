@@ -13,8 +13,11 @@ from typing import Dict, Any, Optional
 from functools import wraps
 
 import requests
+from google.api_core.exceptions import ServiceUnavailable
 from requests import JSONDecodeError
 from requests.exceptions import RequestException
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
+from urllib3.exceptions import HTTPError
 
 from src.config import BASE_DIR, log
 from src.decorators import production_only
@@ -22,6 +25,7 @@ from src.models.mutualser import FileLinkRequest, FileLinkResponse, UploadFilesR
 
 from src.constants import LOGI_NIT, MUTUALSER_USERNAME, MUTUALSER_PASSWORD, BASE_URL_AUTH, BASE_URL_API, PORTAL_URL, \
     USER_ID
+from src.resources.exceptions import ServiceUnavailableError
 from src.resources.files import extract_nro_factura_from_file
 
 
@@ -139,6 +143,9 @@ class MutualSerAPIClient:
             response = self.session.request(method, url, **kwargs)
             response.raise_for_status()
             return {} if response.status_code == 204 else response.json()
+        except HTTPError as e:
+            if response and response.status_code == 503:
+                raise ServiceUnavailableError(f"API de Mutual ser arrojó error: {e}")
         except JSONDecodeError:
             if endpoint == self.UPLOAD_RIPS_ENDPOINT:
                 return {}
@@ -387,6 +394,7 @@ class MutualSerAPIClient:
                          f"Último estado de API fue {resp_obj.estado_basado_en_archivos!r}. "
                          f"El ID de Cargue es {self.transaction_id}.")
 
+    @retry(stop=stop_after_attempt(2), wait=wait_fixed(60), retry=retry_if_exception_type(ServiceUnavailableError), reraise=True)
     @production_only
     def upload_file(self, filepath: Path) -> FindLoadResponse | None:
         """Main function to upload the file into Mutualser."""

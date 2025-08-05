@@ -76,7 +76,7 @@ class Process:
             except FacturaCargadaSinExito as e:
                 self.post_exception(message, str(e))
             except Exception as e:
-                self.post_exception(message, str(e))
+                self.post_exception(message, f"{type(e)}: {str(e)}")
             else:
                 self.finish(message)
             finally:
@@ -157,7 +157,8 @@ def run_process():
         first_record = ordered_records[-1]
         log.info(f"REPORT: Primera Factura fue {first_record[0]} del {first_record[1].email.momento_factura}.")
         log.info(f"REPORT: Última Factura fue {last_record[0]} del {last_record[1].email.momento_factura}.")
-        log.info(f"REPORT: Comenzó a las {moment:%T} y le tomó {diff_dates(moment, colombia_now())}.")
+        log.info(f"REPORT: Comenzó a las {moment:%T} y le tomó {diff_dates(moment, colombia_now())} procesar"
+                 f" {len(ordered_records)} correos.")
 
 
 if __name__ == '__main__':
