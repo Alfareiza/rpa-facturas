@@ -143,13 +143,12 @@ class MutualSerAPIClient:
             response = self.session.request(method, url, **kwargs)
             response.raise_for_status()
             return {} if response.status_code == 204 else response.json()
-        except HTTPError as e:
-            if response and response.status_code == 503:
-                raise ServiceUnavailableError(f"API de Mutual ser arrojó error: {e}")
         except JSONDecodeError:
             if endpoint == self.UPLOAD_RIPS_ENDPOINT:
                 return {}
         except RequestException as e:
+            if response and response.status_code in (503,):
+                raise ServiceUnavailableError(f"API de Mutual ser arrojó error: {e}")
             log.error(f"API request to {url} failed: {e}")
             raise
 

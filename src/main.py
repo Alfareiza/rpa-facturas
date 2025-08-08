@@ -5,7 +5,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from pytz import timezone
 
 from src.config import log
-from src.constants import Reasons, Emails, Subjects
+from src.constants import Reasons, Emails, Subjects, EMAILS_PER_EXECUTION
 from src.decorators import production_only
 from src.models.general import Run, Record
 from src.models.google import EmailMessage
@@ -39,7 +39,7 @@ class Process:
         A generator that fetches unread emails from the inbox, downloads their attachments,
         and yields EmailMessage objects for further processing.
         """
-        messages = self.gmail.read_inbox(200)
+        messages = self.gmail.read_inbox(EMAILS_PER_EXECUTION)
         for message in messages:
             log.info(f"{message.id} INICIANDO Leyendo e-mail y descargando adjunto")
             self.gmail.fetch_email_details(message)
@@ -76,7 +76,7 @@ class Process:
             except FacturaCargadaSinExito as e:
                 self.post_exception(message, str(e))
             except Exception as e:
-                self.post_exception(message, f"{type(e)}: {str(e)}")
+                self.post_exception(message, f"{str(type(e))}: {str(e)}")
             else:
                 self.finish(message)
             finally:
