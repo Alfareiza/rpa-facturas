@@ -1,4 +1,5 @@
 from datetime import datetime
+from http.client import HTTPException
 from pathlib import Path
 
 from apscheduler.schedulers.blocking import BlockingScheduler
@@ -110,13 +111,17 @@ class Process:
         """Send the email notifying the issue with the invoice."""
         subject = Subjects.define_subject(message.nro_factura, reason, message.fecha_factura)
         bcc = '' if 'inconsistencia en el valor total' in subject else None
-        self.gmail.send_email(to=Emails.LOGIFARMA_ADMIN,
+        try:
+            self.gmail.send_email(to=Emails.LOGIFARMA_ADMIN,
                               bcc=bcc,
                               subject=subject,
                               body_vars={'nro_factura': message.nro_factura, 'reason': reason,
                                          'fecha_factura': message.fecha_factura},
                               attachment_file=message.attachment_path)
-        log.info(f"{message.nro_factura} E-mail enviado notificando incosistencia: {reason}")
+        except HTTPException as e:
+            log.warning(f"{message.nro_factura} No fue posible enviar correo {subject!r} por error: {str(e)}")
+        else:
+            log.info(f"{message.nro_factura} E-mail enviado notificando incosistencia: {reason}")
 
     @production_only
     def register_in_sheets(self):
