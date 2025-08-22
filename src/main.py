@@ -118,7 +118,7 @@ class Process:
                               body_vars={'nro_factura': message.nro_factura, 'reason': reason,
                                          'fecha_factura': message.fecha_factura},
                               attachment_file=message.attachment_path)
-        except HTTPException as e:
+        except HttpError as e:
             log.warning(f"{message.nro_factura} No fue posible enviar correo {subject!r} por error: {str(e)}")
         else:
             log.info(f"{message.nro_factura} E-mail enviado notificando incosistencia: {reason}")
@@ -139,7 +139,8 @@ def run_process():
     This is the function that will be scheduled by Rocketry.
     """
     moment = colombia_now()
-    if moment.hour > 20 and moment.minute >= 0 or moment.hour < 6:
+    # Executed from Monday to Saturday, from 6:00:00 up to 20:59:59
+    if moment.isoweekday() == 7 or moment.hour > 20 and moment.minute >= 0 or moment.hour < 6:
         log.info(f"SCHEDULER: Procesamiento de facturas deshabilitado en este horario ({moment:%D %r})")
     else:
         log.info("SCHEDULER: Iniciando nuevo procesamiento de facturas.")
