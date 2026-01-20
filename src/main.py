@@ -126,8 +126,9 @@ class Process:
         """
         for idx, message in enumerate(self.get_emails(), 1):
             try:
-                log.info(f"{idx}. {message.id} {message.nro_factura} {message.fecha_factura} Enviando a Mutualser")
+                # log.info(f"{idx}. {message.id} {message.nro_factura} {message.fecha_factura} Enviando a Mutualser")
                 # self.send_invoice_to_mutual_ser(message.attachment_path, message.nro_factura)
+                ...
             except FileNotFoundError:
                 self.post_exception(message, Reasons.FILE_NOT_FOUND_MUTUAL_SER)
             except FacturaCargadaSinExito as e:
