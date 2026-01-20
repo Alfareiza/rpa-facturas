@@ -6,7 +6,9 @@ from googleapiclient.http import MediaFileUpload
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_not_exception_type
 
 from src.constants import GOOGLE_TOKEN, GOOGLE_REFRESH_TOKEN, GOOGLE_TOKEN_URI, GOOGLE_CLIENT_ID, \
-    GOOGLE_CLIENT_SECRET, GOOGLE_SCOPES, FACTURAS_PDF, FACTURAS_PROCESADAS, FACTURAS_TMP
+    GOOGLE_CLIENT_SECRET, GOOGLE_SCOPES, FACTURAS_PDF, FACTURAS_PROCESADAS, FACTURAS_TMP, LOGISTICA_GOOGLE_TOKEN, \
+    LOGISTICA_GOOGLE_REFRESH_TOKEN, LOGISTICA_GOOGLE_CLIENT_ID, LOGISTICA_GOOGLE_CLIENT_SECRET, LOGISTICA_GOOGLE_SCOPES, \
+    XMLS_MUTUALSER
 
 
 class GoogleDrive:
@@ -24,6 +26,10 @@ class GoogleDrive:
         self.facturas_pdf = FACTURAS_PDF
         self.procesadas = FACTURAS_PROCESADAS
         self.temp = FACTURAS_TMP
+
+    def get_facturas_mes_name(self, mes: int, ano: int):
+        """"""
+        return f"FacturasMutualser_{ano}{mes:02d}"
 
     @retry(stop=stop_after_attempt(10), wait=wait_fixed(1), retry=retry_if_not_exception_type(FileNotFoundError),
            reraise=True)
@@ -64,6 +70,43 @@ class GoogleDrive:
         Deletes a file from Google Drive.
         """
         self.service.files().delete(fileId=file_id).execute()
+
+
+class GoogleDriveLogistica:
+    def __init__(self):
+        self.creds = Credentials(
+            token=LOGISTICA_GOOGLE_TOKEN,
+            refresh_token=LOGISTICA_GOOGLE_REFRESH_TOKEN,
+            token_uri=GOOGLE_TOKEN_URI,
+            client_id=LOGISTICA_GOOGLE_CLIENT_ID,
+            client_secret=LOGISTICA_GOOGLE_CLIENT_SECRET,
+            scopes=LOGISTICA_GOOGLE_SCOPES
+        )
+        self.service = build('drive', 'v3', credentials=self.creds)
+
+        self.xmls = XMLS_MUTUALSER
+
+    @retry(stop=stop_after_attempt(10), wait=wait_fixed(1), reraise=True)
+    def create_or_get_folder_id(self, folder_name: str) -> str:
+        """
+        Gets a folder by name or creates it if it doesn't exist.
+        """
+        query = f"mimeType='application/vnd.google-apps.folder' and name='{folder_name}' and trashed=false"
+        response = self.service.files().list(
+            q=query,
+            spaces='drive',
+            fields='files(id, name)'
+        ).execute()
+        if files := response.get('files', []):
+            return files[0].get('id')
+
+        file_metadata = {
+            'name': folder_name,
+            'parents': [self.xmls],
+            'mimeType': 'application/vnd.google-apps.folder'
+        }
+        folder = self.service.files().create(body=file_metadata, fields='id').execute()
+        return folder.get('id')
 
 
 if __name__ == '__main__':

@@ -1,4 +1,5 @@
 import base64
+import re
 import ssl
 from datetime import datetime
 from email.utils import formataddr
@@ -55,7 +56,7 @@ class GmailAPIReader:
         next_page_token = None
         while len(all_messages) < limit:
             results = self._list_messages(
-                query=f'is:unread subject:"{LOGI_NIT};LOGIFARMA SAS;"',
+                query=f'subject:"{LOGI_NIT};LOGIFARMA SAS;" after:2025/06/30 before:2026/01/01',
                 next_page_token=next_page_token
             )
             messages = results.get('messages', [])
@@ -77,7 +78,8 @@ class GmailAPIReader:
             if header['name'] == 'To':
                 message.recipient = header['value']
             if header['name'] == 'Date':
-                message.received_at = datetime.strptime(header['value'], '%a, %d %b %Y %H:%M:%S %z')
+                clean_value = re.sub(r"\s*\(.*\)$", "", header["value"])
+                message.received_at = datetime.strptime(clean_value, '%a, %d %b %Y %H:%M:%S %z')
 
         if 'parts' in payload:
             for part in payload['parts']:

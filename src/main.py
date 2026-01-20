@@ -13,7 +13,8 @@ from src.models.google import EmailMessage
 from src.models.mutualser import FindLoadResponse
 from src.resources.datetimes import colombia_now, diff_dates
 from src.resources.exceptions import FacturaCargadaSinExito
-from src.services.drive import GoogleDrive
+from src.resources.files import File
+from src.services.drive import GoogleDrive, GoogleDriveLogistica
 from src.services.gmail import GmailAPIReader
 from src.services.mutualser import MutualSerAPIClient
 from src.services.sheets import GSpreadSheets
@@ -32,8 +33,29 @@ class Process:
         self.run = Run()
         self.gmail = GmailAPIReader()
         self.drive = GoogleDrive()
+        self.drive_logistica = GoogleDriveLogistica()
         self.gs = GSpreadSheets()
         self.mutualser_client = MutualSerAPIClient()
+
+    def read_lines_to_list(self, file_path: str | Path) -> list[str]:
+        """Read a text file and return a list where each line is an item.
+
+        Strips trailing newline characters and ignores empty lines.
+        """
+        path = Path(file_path)
+
+        with path.open(encoding="utf-8") as file:
+            return [line.strip() for line in file if line.strip()]
+
+    def append_line_to_file(self, file_path: str | Path, value: str) -> None:
+        """Append a single line to the end of a text file.
+
+        Automatically adds a newline before the value if needed.
+        """
+        path = Path(file_path)
+
+        with path.open("a", encoding="utf-8") as file:
+            file.write(f"{value}\n")
 
     def get_emails(self):
         """
@@ -41,27 +63,60 @@ class Process:
         and yields EmailMessage objects for further processing.
         """
         messages = self.gmail.read_inbox(EMAILS_PER_EXECUTION)
-        for message in messages:
-            log.info(f"{message.id} INICIANDO Leyendo e-mail y descargando adjunto")
+        # read_lines_to_list = set(self.read_lines_to_list("/Users/alfonso/Projects/rpa-facturas/processed.txt"))
+        for idx, message in enumerate(messages, 1):
+            log.info(f"{idx}. {message.id} INICIANDO Leyendo e-mail y descargando adjunto")
             self.gmail.fetch_email_details(message)
+            # if message.nro_factura in read_lines_to_list:
+            #     log.info(f"{idx}. {message.id} Factura {message.nro_factura} procesada anteriormente, omitiendola")
+            #     continue
             self.run.record[message.nro_factura] = Record(email=message)
             self.gmail.download_attachment(message)
             yield message
 
-    def send_invoice_to_mutual_ser(self, message: EmailMessage):
+    def send_invoice_to_mutual_ser(self, zip_file: Path, nro_factura: str):
         """
         Uploads the invoice file attached to an email to the Mutualser API.
 
         Args:
-            message: The EmailMessage object containing the invoice attachment.
+            zip_file: File path to be updated to mutual ser portal.
+            nro_factura: Invoice number.
 
         Raises:
             FacturaCargadaSinExito: If the upload to the Mutualser API fails.
         """
-        response: FindLoadResponse = self.mutualser_client.upload_file(message.attachment_path)
-        self.run.record[message.nro_factura].response_mutualser = response
+        response: FindLoadResponse = self.mutualser_client.upload_file(zip_file)
+        self.run.record[nro_factura].response_mutualser = response
         if not response.cargado_exitoso:
             raise FacturaCargadaSinExito(response.unico_archivo.motivo_error)
+
+    def process_xmls_and_pdf(self, message: EmailMessage):
+        """Perform the next actions:
+        1. Upload .zip to temp folder on Google Drive.
+        2. Unzip files resulting a .pdf and a .xml files.
+        3. Rename .xml and .pdf files to respective names.
+        4. Update .xml file based on business logic.
+        5. Create folder on Google Drive if it doesn't exist.
+        6. Upload .pdf on "Procesados" folder.
+        7. Upload .xml on folder of the month based on invoice date.
+        """
+        try:
+            zip_temp = self.upload_file_to_drive(message.attachment_path, folder='TMP')
+            xml_file, pdf_file = self.unzip_files(message.attachment_path)
+            xml_file = xml_file.rename(xml_file.parent / f"{message.nro_factura}_{xml_file.stem}.xml")
+            pdf_file = pdf_file.rename(pdf_file.parent / f"{message.nro_factura}_{message.valor_factura}.pdf")
+            xml_file = File(xml_file).update_invoice()
+            folder_name = self.drive.get_facturas_mes_name(message.received_at.date().month,
+                                                           message.received_at.date().year)
+            self.upload_file_to_drive(pdf_file, folder='PROCESADOS')
+            self.upload_file_to_drive(xml_file, folder=folder_name)
+        except Exception as e:
+            import traceback;
+            traceback.print_exc()
+            log.error(str(e))
+        finally:
+            self.drive.delete_file(zip_temp)
+
 
     def read_email_send_invoice(self):
         """
@@ -70,8 +125,8 @@ class Process:
         """
         for idx, message in enumerate(self.get_emails(), 1):
             try:
-                log.info(f"{message.id} {message.nro_factura} {message.fecha_factura} {idx} Enviando a Mutualser")
-                self.send_invoice_to_mutual_ser(message)
+                log.info(f"{idx}. {message.id} {message.nro_factura} {message.fecha_factura} Enviando a Mutualser")
+                # self.send_invoice_to_mutual_ser(message.attachment_path, message.nro_factura)
             except FileNotFoundError:
                 self.post_exception(message, Reasons.FILE_NOT_FOUND_MUTUAL_SER)
             except FacturaCargadaSinExito as e:
@@ -79,23 +134,25 @@ class Process:
             except Exception as e:
                 self.post_exception(message, f"{str(type(e))}: {str(e)}")
             else:
-                self.finish(message)
+                self.finish(idx, message)
             finally:
                 message.delete_files()
                 log.info(f"{20 * '=='}\n")
 
-    def finish(self, message: EmailMessage):
+    def finish(self, idx: int, message: EmailMessage):
         """
         Execute some operations as part of the finished process of upload the invoice into customer api.
         1. Mark e-mail as read.
         2. Upload the invoice to Google Drive.
         3. Set the status for report purposes.
         """
-        log.info(f"{message.id} {message.nro_factura}_{message.valor_factura}.pdf siendo cargado en Drive")
-        self.gmail.mark_as_read(message.id)
+        log.info(f"{idx}. {message.id} {message.nro_factura}_{message.valor_factura}.pdf siendo cargado en Drive")
+        # self.gmail.mark_as_read(message.id)
         self.run.record[message.nro_factura].status = Reasons.UPLOADED_MUTUAL_SER
-        self.drive.upload_file(message.extract_and_rename_pdf(), self.drive.facturas_pdf)
-        log.info(f"{message.id} {message.nro_factura} {message.fecha_factura} FINALIZADO")
+        # self.drive.upload_file(message.extract_and_rename_pdf(), self.drive.facturas_pdf)
+        self.process_xmls_and_pdf(message)
+        self.append_line_to_file("/Users/alfonso/Projects/rpa-facturas/processed.txt", message.nro_factura)
+        log.info(f"{idx}. {message.id} {message.nro_factura} {message.fecha_factura} FINALIZADO")
 
     def post_exception(self, message: EmailMessage, reason: str):
         """Operations to be executed when an exception is raised.
@@ -133,6 +190,25 @@ class Process:
         self.gs.insert_dataframe(df)
 
 
+    def unzip_files(self, zip_file: Path) -> tuple[Path, Path]:
+        """Return the paths of the unzipped file which is on temporary folder."""
+        files = File(zip_file).unzip()
+        return files['xml'], files['pdf']
+
+    def upload_file_to_drive(self, file: Path, folder: str):
+        """Upload zip file to Google Drive"""
+        match folder:
+            case 'TMP':
+                file_id = self.drive.upload_file(file, self.drive.temp)
+            case 'PROCESADOS':
+                file_id = self.drive.upload_file(file, self.drive.facturas_pdf)
+            case _:
+                folder_id = self.drive_logistica.create_or_get_folder_id(folder)
+                file_id = self.drive.upload_file(file, folder_id)
+        return file_id.get('id')
+
+
+
 def run_process():
     """
     Main execution function that orchestrates the entire process.
@@ -159,10 +235,11 @@ def run_process():
 
             traceback.print_exc()
         ordered_records = p.run.order_by_fecha_factura()
-        last_record = ordered_records[0]
-        first_record = ordered_records[-1]
-        log.info(f"REPORT: Primera Factura fue {first_record[0]} del {first_record[1].email.momento_factura}.")
-        log.info(f"REPORT: Última Factura fue {last_record[0]} del {last_record[1].email.momento_factura}.")
+        if ordered_records:
+            last_record = ordered_records[0]
+            first_record = ordered_records[-1]
+            log.info(f"REPORT: Primera Factura fue {first_record[0]} del {first_record[1].email.momento_factura}.")
+            log.info(f"REPORT: Última Factura fue {last_record[0]} del {last_record[1].email.momento_factura}.")
         log.info(f"REPORT: Comenzó a las {moment:%T} y le tomó {diff_dates(moment, colombia_now())} procesar"
                  f" {len(ordered_records)} correos.")
 
@@ -170,11 +247,11 @@ def run_process():
 if __name__ == '__main__':
     # for i, (nro, record) in enumerate(p.run.record.items(), 1):
     #     print(f"{i}. {nro}: {record.email.subject}")
-    # run_process()
-    scheduler = BlockingScheduler()
-    scheduler.add_job(run_process, 'interval', minutes=60, id='invoice_processing_job')
-    try:
-        scheduler.start()
-    except (KeyboardInterrupt, SystemExit):
-        log.info("Scheduler stopped by user.")
-        scheduler.shutdown()
+    run_process()
+    # scheduler = BlockingScheduler()
+    # scheduler.add_job(run_process, 'interval', minutes=60, id='invoice_processing_job')
+    # try:
+    #     scheduler.start()
+    # except (KeyboardInterrupt, SystemExit):
+    #     log.info("Scheduler stopped by user.")
+    #     scheduler.shutdown()
