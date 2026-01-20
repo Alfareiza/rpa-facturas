@@ -152,7 +152,7 @@ class Process:
         self.run.record[message.nro_factura].status = Reasons.UPLOADED_MUTUAL_SER
         # self.drive.upload_file(message.extract_and_rename_pdf(), self.drive.facturas_pdf)
         self.process_xmls_and_pdf(message)
-        self.append_line_to_file("/Users/alfonso/Projects/rpa-facturas/processed.txt", message.nro_factura)
+        # self.append_line_to_file("/Users/alfonso/Projects/rpa-facturas/processed.txt", message.nro_factura)
         log.info(f"{idx}. {message.id} {message.nro_factura} {message.fecha_factura} FINALIZADO")
 
     def post_exception(self, message: EmailMessage, reason: str):
@@ -217,32 +217,20 @@ def run_process():
     """
     moment = colombia_now()
     # Executed from Monday to Saturday, from 6:00:00 up to 20:59:59
-    if moment.isoweekday() == 7 or moment.hour > 20 and moment.minute >= 0 or moment.hour < 6:
-        log.info(f"SCHEDULER: Procesamiento de facturas deshabilitado en este horario ({moment:%D %r})")
-    else:
-        log.info("SCHEDULER: Iniciando nuevo procesamiento de facturas.")
-        p = Process()
-        try:
-            p.read_email_send_invoice()
-        except Exception as e:
-            import traceback
-
-            traceback.print_exc()
-
-        try:
-            p.register_in_sheets()
-        except Exception as e:
-            import traceback
-
-            traceback.print_exc()
-        ordered_records = p.run.order_by_fecha_factura()
-        if ordered_records:
-            last_record = ordered_records[0]
-            first_record = ordered_records[-1]
-            log.info(f"REPORT: Primera Factura fue {first_record[0]} del {first_record[1].email.momento_factura}.")
-            log.info(f"REPORT: Última Factura fue {last_record[0]} del {last_record[1].email.momento_factura}.")
-        log.info(f"REPORT: Comenzó a las {moment:%T} y le tomó {diff_dates(moment, colombia_now())} procesar"
-                 f" {len(ordered_records)} correos.")
+    log.info("SCHEDULER: Iniciando nuevo procesamiento de facturas.")
+    p = Process()
+    try:
+        p.read_email_send_invoice()
+    except Exception as e:
+        import traceback;traceback.print_exc()
+    ordered_records = p.run.order_by_fecha_factura()
+    if ordered_records:
+        last_record = ordered_records[0]
+        first_record = ordered_records[-1]
+        log.info(f"REPORT: Primera Factura fue {first_record[0]} del {first_record[1].email.momento_factura}.")
+        log.info(f"REPORT: Última Factura fue {last_record[0]} del {last_record[1].email.momento_factura}.")
+    log.info(f"REPORT: Comenzó a las {moment:%T} y le tomó {diff_dates(moment, colombia_now())} procesar"
+             f" {len(ordered_records)} correos.")
 
 
 if __name__ == '__main__':
