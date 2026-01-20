@@ -3,6 +3,7 @@ from http.client import HTTPException
 from pathlib import Path
 
 from apscheduler.schedulers.blocking import BlockingScheduler
+from googleapiclient.errors import HttpError
 from pytz import timezone
 
 from src.config import log
@@ -247,11 +248,11 @@ def run_process():
 if __name__ == '__main__':
     # for i, (nro, record) in enumerate(p.run.record.items(), 1):
     #     print(f"{i}. {nro}: {record.email.subject}")
-    run_process()
-    # scheduler = BlockingScheduler()
-    # scheduler.add_job(run_process, 'interval', minutes=60, id='invoice_processing_job')
-    # try:
-    #     scheduler.start()
-    # except (KeyboardInterrupt, SystemExit):
-    #     log.info("Scheduler stopped by user.")
-    #     scheduler.shutdown()
+    # run_process()
+    scheduler = BlockingScheduler()
+    scheduler.add_job(run_process, 'interval', minutes=60, id='invoice_processing_job')
+    try:
+        scheduler.start()
+    except (KeyboardInterrupt, SystemExit):
+        log.info("Scheduler stopped by user.")
+        scheduler.shutdown()
