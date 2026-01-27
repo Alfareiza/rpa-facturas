@@ -11,6 +11,7 @@ google-auth-oauthlib
 gspread
 gspread-dataframe
 gspread-formatting
+pytz
 pandas
 supabase
 tenacity
