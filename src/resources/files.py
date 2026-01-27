@@ -1,3 +1,5 @@
+import mimetypes
+
 from src.config import log
 
 import tempfile
@@ -76,6 +78,10 @@ def extract_nro_factura_from_file(file_path: Path) -> str:
         return splitted_file_name[0]
     return file_path.name
 
+
+def get_mime_type(path: Path) -> str | None:
+    mime_type, _ = mimetypes.guess_type(path.name)
+    return mime_type
 
 if __name__ == '__main__':
     file = File(Path('/Users/alfonso/Downloads/ArchivoEjemploIncorrecto_ad09000732230162500173a4e.xml'))
