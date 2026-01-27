@@ -13,7 +13,7 @@ from tenacity import retry, stop_after_attempt, wait_fixed
 from src.config import CONFIG, BASE_DIR
 from src.constants import LOGI_NIT, GOOGLE_TOKEN, GOOGLE_SCOPES, GOOGLE_REFRESH_TOKEN, GOOGLE_TOKEN_URI, \
     GOOGLE_CLIENT_ID, \
-    GOOGLE_CLIENT_SECRET, Emails
+    GOOGLE_CLIENT_SECRET, Emails, GMAIL_QUERY
 from src.decorators import production_only
 from src.models.google import EmailMessage
 
@@ -56,7 +56,7 @@ class GmailAPIReader:
         next_page_token = None
         while len(all_messages) < limit:
             results = self._list_messages(
-                query=f'subject:"{LOGI_NIT};LOGIFARMA SAS;" after:2025/06/30 before:2026/01/01',
+                query=f'subject:"{LOGI_NIT};LOGIFARMA SAS;" {GMAIL_QUERY}',
                 next_page_token=next_page_token
             )
             messages = results.get('messages', [])
@@ -64,7 +64,7 @@ class GmailAPIReader:
             next_page_token = results.get('nextPageToken')
             if not next_page_token:
                 break
-        return all_messages[:limit]
+        return all_messages[::-1][:limit]
 
     def fetch_email_details(self, message: EmailMessage) -> None:
         """Fetches the details of an email and updates the EmailMessage object."""

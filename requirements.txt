@@ -12,5 +12,6 @@ gspread
 gspread-dataframe
 gspread-formatting
 pandas
+supabase
 tenacity
 python-decouple

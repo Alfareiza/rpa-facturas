@@ -1,6 +1,7 @@
 from datetime import datetime
 from http.client import HTTPException
 from pathlib import Path
+from sqlite3 import IntegrityError
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 from googleapiclient.errors import HttpError
@@ -13,12 +14,13 @@ from src.models.general import Run, Record
 from src.models.google import EmailMessage
 from src.models.mutualser import FindLoadResponse
 from src.resources.datetimes import colombia_now, diff_dates
-from src.resources.exceptions import FacturaCargadaSinExito
+from src.resources.exceptions import FacturaCargadaSinExito, DuplicatedRow
 from src.resources.files import File
 from src.services.drive import GoogleDrive, GoogleDriveLogistica
 from src.services.gmail import GmailAPIReader
 from src.services.mutualser import MutualSerAPIClient
 from src.services.sheets import GSpreadSheets
+from src.services.supbase import Supabase
 
 
 class Process:
@@ -37,26 +39,7 @@ class Process:
         self.drive_logistica = GoogleDriveLogistica()
         self.gs = GSpreadSheets()
         self.mutualser_client = MutualSerAPIClient()
-
-    def read_lines_to_list(self, file_path: str | Path) -> list[str]:
-        """Read a text file and return a list where each line is an item.
-
-        Strips trailing newline characters and ignores empty lines.
-        """
-        path = Path(file_path)
-
-        with path.open(encoding="utf-8") as file:
-            return [line.strip() for line in file if line.strip()]
-
-    def append_line_to_file(self, file_path: str | Path, value: str) -> None:
-        """Append a single line to the end of a text file.
-
-        Automatically adds a newline before the value if needed.
-        """
-        path = Path(file_path)
-
-        with path.open("a", encoding="utf-8") as file:
-            file.write(f"{value}\n")
+        self.bd = Supabase()
 
     def get_emails(self):
         """
@@ -67,11 +50,18 @@ class Process:
         # read_lines_to_list = set(self.read_lines_to_list("/Users/alfonso/Projects/rpa-facturas/processed.txt"))
         for idx, message in enumerate(messages, 1):
             log.info(f"{idx}. {message.id} INICIANDO Leyendo e-mail y descargando adjunto")
+            try:
+                record = Record(email=message)
+                # record.save()
+            except DuplicatedRow:
+                log.info(f"{idx}. {message.id} Procesado anteriormente")
+                continue
+
             self.gmail.fetch_email_details(message)
             # if message.nro_factura in read_lines_to_list:
             #     log.info(f"{idx}. {message.id} Factura {message.nro_factura} procesada anteriormente, omitiendola")
             #     continue
-            self.run.record[message.nro_factura] = Record(email=message)
+            self.run.record[message.nro_factura] = record
             self.gmail.download_attachment(message)
             yield message
 
@@ -105,7 +95,7 @@ class Process:
             zip_temp = self.upload_file_to_drive(message.attachment_path, folder='TMP')
             xml_file, pdf_file = self.unzip_files(message.attachment_path)
             xml_file = xml_file.rename(xml_file.parent / f"{message.nro_factura}_{xml_file.stem}.xml")
-            pdf_file = pdf_file.rename(pdf_file.parent / f"{message.nro_factura}_{message.valor_factura}.pdf")
+            pdf_file = pdf_file.rename(pdf_file.parent / f"{message.nro_factura}_{message.valor_factura or ""}.pdf")
             xml_file = File(xml_file).update_invoice()
             folder_name = self.drive.get_facturas_mes_name(message.received_at.date().month,
                                                            message.received_at.date().year)
@@ -148,12 +138,12 @@ class Process:
         2. Upload the invoice to Google Drive.
         3. Set the status for report purposes.
         """
-        log.info(f"{idx}. {message.id} {message.nro_factura}_{message.valor_factura}.pdf siendo cargado en Drive")
+        log.info(f"{idx}. {message.id} XML y PDF de factura {message.nro_factura} de {message.fecha_factura} siendo cargados al Drive")
         # self.gmail.mark_as_read(message.id)
         self.run.record[message.nro_factura].status = Reasons.UPLOADED_MUTUAL_SER
         # self.drive.upload_file(message.extract_and_rename_pdf(), self.drive.facturas_pdf)
         self.process_xmls_and_pdf(message)
-        # self.append_line_to_file("/Users/alfonso/Projects/rpa-facturas/processed.txt", message.nro_factura)
+        # self.run.record[message.nro_factura].update(nro_factura=message.nro_factura)
         log.info(f"{idx}. {message.id} {message.nro_factura} {message.fecha_factura} FINALIZADO")
 
     def post_exception(self, message: EmailMessage, reason: str):
@@ -164,6 +154,7 @@ class Process:
         """
         self.run.record[message.nro_factura].status = Reasons.INVOCE_UPLOADED_WITH_ERROR
         self.run.record[message.nro_factura].errors.append(reason)
+        # self.run.record[message.nro_factura].remove()
         self.send_mail(message, reason)
 
     def send_mail(self, message: EmailMessage, reason: str):
@@ -237,11 +228,11 @@ def run_process():
 if __name__ == '__main__':
     # for i, (nro, record) in enumerate(p.run.record.items(), 1):
     #     print(f"{i}. {nro}: {record.email.subject}")
-    # run_process()
-    scheduler = BlockingScheduler()
-    scheduler.add_job(run_process, 'interval', minutes=60, id='invoice_processing_job')
-    try:
-        scheduler.start()
-    except (KeyboardInterrupt, SystemExit):
-        log.info("Scheduler stopped by user.")
-        scheduler.shutdown()
+    run_process()
+    # scheduler = BlockingScheduler()
+    # scheduler.add_job(run_process, 'interval', minutes=60, id='invoice_processing_job')
+    # try:
+    #     scheduler.start()
+    # except (KeyboardInterrupt, SystemExit):
+    #     log.info("Scheduler stopped by user.")
+    #     scheduler.shutdown()

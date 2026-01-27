@@ -3,6 +3,8 @@ from pathlib import Path
 
 from decouple import config
 
+from src.services.supbase import Supabase
+
 BASE_DIR: Path = Path(__file__).resolve().parent.parent
 _IN_PRODUCTION = config('PRODUCTION', default=False, cast=bool)
 _TEST_MODE = config('TEST_MODE', default=False, cast=bool)
@@ -26,6 +28,8 @@ class Config:
         """
 
         TEMP =  Path('/tmp')
+
+    objects = Supabase()
 
 
 CONFIG = Config()

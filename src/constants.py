@@ -38,6 +38,13 @@ FACTURAS_TMP = config('FACTURAS_TMP')
 
 XMLS_MUTUALSER = config('XMLS_MUTUALSER')
 
+# Supabase
+SUPABASE_URL = config('SUPABASE_URL')
+SUPABASE_KEY = config('SUPABASE_KEY')
+TABLE_FAC_PROCS = config('TABLE_FAC_PROCS')
+
+# Gmail
+GMAIL_QUERY = config("GMAIL_QUERY")
 
 class Reasons:
     FILE_NOT_FOUND_MUTUAL_SER = 'Archivo no encontrado al intentar ser enviado a Mutualser'
