@@ -115,8 +115,11 @@ class XMLHealthInvoiceProcessor:
 
     @property
     def issue_date(self):
-        pattern = r'FecFac: (\d{4}-\d{2}-\d{2})'
-        return match.group(1) if (match := re.search(pattern, self.content)) else None
+        patterns = {r'FecFac: (\d{4}-\d{2}-\d{2})', r'UUID><cbc:IssueDate>(\d{4}-\d{2}-\d{2})<\/cbc:IssueDate>'}
+        for pattern in patterns:
+            if match := re.search(pattern, self.content):
+                return match.group(1)
+        return None
 
     def logic_codigo_prestador(self):
         if self.codigo_prestador.is_present:
@@ -168,7 +171,7 @@ class XMLHealthInvoiceProcessor:
             return
 
         if not (issue_date := self.issue_date):
-            log.warning("No fue posible complementar invoicePeriod por que no se detectó el 'IssueDate'")
+            log.warning("No fue posible incluir el invoicePeriod por que no se detectó el 'IssueDate'")
             return
 
         new_invoice_period = f"""{self.line_counter_numeric.original_string}
