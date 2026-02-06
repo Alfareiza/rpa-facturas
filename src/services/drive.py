@@ -65,9 +65,9 @@ class GoogleDrive:
         """Uploads a file to Google Drive."""
         # Check if file already exists in the folder
         if existing_file := self.file_exists_in_folder(file_path, folder_id):
-            log.info(f"Archivo {file_path.name} existe en Drive, eliminándolo")
-            self.delete_file(existing_file.get('id'))
-            # return existing_file
+            log.info(f"Archivo {file_path.name} existe en Drive")
+            # self.delete_file(existing_file.get('id'))
+            return existing_file
         
         file_metadata = {
             'name': file_path.name,
