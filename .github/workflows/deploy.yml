@@ -32,14 +32,27 @@ jobs:
             -o StrictHostKeyChecking=no \
             -o ConnectTimeout=15 \
             ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
-            'cd ~/Projects/rpa-facturas-mutualser && git pull && sudo systemctl restart rpa-facturas-mutualser && sleep 3 && sudo systemctl status rpa-facturas-mutualser --no-pager'
+            'cd ~/Projects/rpa-facturas-mutualser && \
+             echo "==> Fetching latest code..." && \
+             git fetch origin main && \
+             echo "==> Resetting to origin/main..." && \
+             git reset --hard origin/main && \
+             echo "==> Restarting service..." && \
+             sudo systemctl restart rpa-facturas-mutualser && \
+             echo "==> Service restarted" && \
+             sleep 3 && \
+             sudo systemctl status rpa-facturas-mutualser --no-pager | head -5'
 
-      - name: Verify deployment on VPS
+      - name: Verify deployment
         run: |
           ssh -i ~/.ssh/deploy_key \
             -o StrictHostKeyChecking=no \
             ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
-            'sudo systemctl show rpa-facturas-mutualser -p ActiveEnterTimestamp'
+            'echo "Restart timestamp:" && \
+             sudo systemctl show rpa-facturas-mutualser -p ActiveEnterTimestamp && \
+             echo "" && \
+             echo "Process status:" && \
+             pgrep -af src.main || echo "Process not found"'
 
       - name: Cleanup
         if: always()
