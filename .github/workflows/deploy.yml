@@ -30,123 +30,67 @@ jobs:
           ssh -i ~/.ssh/deploy_key \
             -o StrictHostKeyChecking=no \
             -o ConnectTimeout=15 \
-            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'ENDSSH'
-            set -euo pipefail
-            
-            echo "=========================================="
-            echo "Starting deployment for $SERVICE_NAME"
-            echo "=========================================="
-            
-            cd $DEPLOY_PATH
-            
-            # Store current commit for comparison
-            BEFORE_COMMIT=$(git rev-parse HEAD)
-            
-            # Pull latest code
-            echo "==> Pulling latest changes from Git"
-            git pull
-            
-            AFTER_COMMIT=$(git rev-parse HEAD)
-            
-            # Check if there were any updates
-            if [ "$BEFORE_COMMIT" = "$AFTER_COMMIT" ]; then
-              echo "==> No new commits, repository already up to date"
-            else
-              echo "==> Updated from $BEFORE_COMMIT to $AFTER_COMMIT"
-            fi
-            
-            # Ensure virtual environment exists
-            echo "==> Checking virtual environment"
-            if [ ! -d .venv ]; then
-              echo "==> Creating virtual environment"
-              make venv
-              VENV_CREATED=true
-            else
-              VENV_CREATED=false
-            fi
-            
-            # Check if requirements.txt changed or venv was just created
-            REQUIREMENTS_CHANGED=false
-            if [ -f requirements.txt ]; then
-              if [ "$VENV_CREATED" = true ]; then
-                echo "==> New virtual environment created, installing dependencies"
-                REQUIREMENTS_CHANGED=true
-              elif [ "$BEFORE_COMMIT" != "$AFTER_COMMIT" ]; then
-                # Check if requirements.txt changed between commits
-                if git diff --name-only $BEFORE_COMMIT $AFTER_COMMIT | grep -q "^requirements.txt$"; then
-                  echo "==> requirements.txt changed, updating dependencies"
-                  REQUIREMENTS_CHANGED=true
-                else
-                  echo "==> requirements.txt unchanged, skipping dependency installation"
-                fi
-              else
-                echo "==> No code changes, skipping dependency check"
-              fi
-              
-              # Install dependencies if needed
-              if [ "$REQUIREMENTS_CHANGED" = true ]; then
-                .venv/bin/pip install -r requirements.txt --upgrade
-              fi
-            else
-              echo "==> No requirements.txt found, skipping dependency installation"
-            fi
-            
-            # Restart the service
-            echo "==> Restarting service"
-            sudo systemctl restart $SERVICE_NAME
-            
-            # Wait for service to start
-            echo "==> Waiting for service to start..."
-            sleep 3
-            
-            echo "=========================================="
-            echo "Deployment complete"
-            echo "=========================================="
-          ENDSSH
-        env:
-          DEPLOY_PATH: ${{ env.DEPLOY_PATH }}
-          SERVICE_NAME: ${{ env.SERVICE_NAME }}
+            -o ServerAliveInterval=5 \
+            -o ServerAliveCountMax=3 \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+            "cd ${{ env.DEPLOY_PATH }} && \
+             echo '==========================================' && \
+             echo 'Starting deployment for ${{ env.SERVICE_NAME }}' && \
+             echo '==========================================' && \
+             BEFORE_COMMIT=\$(git rev-parse HEAD) && \
+             echo '==> Pulling latest changes from Git' && \
+             git pull && \
+             AFTER_COMMIT=\$(git rev-parse HEAD) && \
+             if [ \"\$BEFORE_COMMIT\" = \"\$AFTER_COMMIT\" ]; then \
+               echo '==> No new commits, repository already up to date'; \
+             else \
+               echo \"==> Updated from \$BEFORE_COMMIT to \$AFTER_COMMIT\"; \
+             fi && \
+             echo '==> Checking virtual environment' && \
+             if [ ! -d .venv ]; then \
+               echo '==> Creating virtual environment' && \
+               make venv && \
+               VENV_CREATED=true; \
+             else \
+               VENV_CREATED=false; \
+             fi && \
+             REQUIREMENTS_CHANGED=false && \
+             if [ -f requirements.txt ]; then \
+               if [ \"\$VENV_CREATED\" = true ]; then \
+                 echo '==> New virtual environment created, installing dependencies' && \
+                 REQUIREMENTS_CHANGED=true; \
+               elif [ \"\$BEFORE_COMMIT\" != \"\$AFTER_COMMIT\" ]; then \
+                 if git diff --name-only \$BEFORE_COMMIT \$AFTER_COMMIT | grep -q '^requirements.txt$'; then \
+                   echo '==> requirements.txt changed, updating dependencies' && \
+                   REQUIREMENTS_CHANGED=true; \
+                 else \
+                   echo '==> requirements.txt unchanged, skipping dependency installation'; \
+                 fi; \
+               else \
+                 echo '==> No code changes, skipping dependency check'; \
+               fi && \
+               if [ \"\$REQUIREMENTS_CHANGED\" = true ]; then \
+                 .venv/bin/pip install -r requirements.txt --upgrade; \
+               fi; \
+             else \
+               echo '==> No requirements.txt found, skipping dependency installation'; \
+             fi && \
+             echo '==> Restarting service' && \
+             sudo systemctl restart ${{ env.SERVICE_NAME }} && \
+             echo '==> Waiting for service to start...' && \
+             sleep 3 && \
+             echo '==========================================' && \
+             echo 'Deployment complete' && \
+             echo '==========================================' \
+            "
 
       - name: Verify deployment
         run: |
+          sleep 2
           ssh -i ~/.ssh/deploy_key \
             -o StrictHostKeyChecking=no \
-            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'ENDSSH'
-            set -euo pipefail
-            
-            echo "=========================================="
-            echo "Verifying deployment"
-            echo "=========================================="
-            
-            # Check service status
-            echo "==> Service Status:"
-            if sudo systemctl is-active --quiet $SERVICE_NAME; then
-              echo "✓ Service is running"
-              sudo systemctl status $SERVICE_NAME --no-pager --lines=5
-            else
-              echo "✗ Service is NOT running!"
-              sudo systemctl status $SERVICE_NAME --no-pager --lines=10
-              exit 1
-            fi
-            
-            # Show recent logs
-            echo ""
-            echo "==> Recent logs (last 20 lines):"
-            tail -20 $DEPLOY_PATH/run.log 2>/dev/null || echo "No logs yet"
-            
-            # Check for Python process
-            echo ""
-            echo "==> Process check:"
-            if pgrep -af "src.main"; then
-              echo "✓ Python process confirmed running"
-            else
-              echo "⚠ Warning: Process not found in pgrep"
-            fi
-            
-            echo "=========================================="
-            echo "Verification complete"
-            echo "=========================================="
-          ENDSSH
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+            'sudo systemctl status rpa-facturas-mutualser --no-pager'
         env:
           DEPLOY_PATH: ${{ env.DEPLOY_PATH }}
           SERVICE_NAME: ${{ env.SERVICE_NAME }}
