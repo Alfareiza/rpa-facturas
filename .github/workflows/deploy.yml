@@ -25,135 +25,115 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Create deployment script
+      - name: Deploy to VPS
         run: |
-          cat > /tmp/deploy.sh << 'SCRIPT'
-          #!/bin/bash
+          ssh -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=no \
+            -o ConnectTimeout=15 \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} 'bash -s' <<'ENDSSH'
           set -ex
           
           cd ~/Projects/rpa-facturas-mutualser
           
           echo "=========================================="
-          echo "Starting deployment for rpa-facturas-mutualser"
+          echo "Starting deployment"
           echo "=========================================="
           
           BEFORE_COMMIT=$(git rev-parse HEAD)
           echo "Current commit: $BEFORE_COMMIT"
           
-          echo "==> Pulling latest changes from Git"
+          echo "==> Pulling latest changes"
           git pull
           
           AFTER_COMMIT=$(git rev-parse HEAD)
           
           if [ "$BEFORE_COMMIT" = "$AFTER_COMMIT" ]; then
-            echo "==> No new commits, repository already up to date"
+            echo "==> No new commits"
           else
             echo "==> Updated from $BEFORE_COMMIT to $AFTER_COMMIT"
           fi
           
-          echo "==> Checking virtual environment"
+          echo "==> Checking venv"
           if [ ! -d .venv ]; then
-            echo "==> Creating virtual environment"
+            echo "==> Creating venv"
             make venv
             VENV_CREATED=true
           else
-            echo "==> Virtual environment already exists"
+            echo "==> Venv exists"
             VENV_CREATED=false
           fi
           
           REQUIREMENTS_CHANGED=false
           if [ -f requirements.txt ]; then
             if [ "$VENV_CREATED" = true ]; then
-              echo "==> New virtual environment created, installing dependencies"
+              echo "==> New venv, installing deps"
               REQUIREMENTS_CHANGED=true
             elif [ "$BEFORE_COMMIT" != "$AFTER_COMMIT" ]; then
               if git diff --name-only $BEFORE_COMMIT $AFTER_COMMIT | grep -q '^requirements.txt$'; then
-                echo "==> requirements.txt changed, updating dependencies"
+                echo "==> requirements.txt changed"
                 REQUIREMENTS_CHANGED=true
               else
-                echo "==> requirements.txt unchanged, skipping dependency installation"
+                echo "==> requirements.txt unchanged"
               fi
             else
-              echo "==> No code changes, skipping dependency check"
+              echo "==> No code changes"
             fi
             
             if [ "$REQUIREMENTS_CHANGED" = true ]; then
-              echo "==> Installing dependencies..."
+              echo "==> Installing deps..."
               .venv/bin/pip install -r requirements.txt --upgrade
             fi
-          else
-            echo "==> No requirements.txt found"
           fi
           
-          echo "==> About to restart service: rpa-facturas-mutualser"
-          echo "==> Checking service status BEFORE restart:"
-          sudo systemctl status rpa-facturas-mutualser --no-pager | head -5 || true
+          echo "==> Status BEFORE restart:"
+          sudo systemctl status rpa-facturas-mutualser --no-pager | head -3 || true
           
-          echo "==> Running: sudo systemctl restart rpa-facturas-mutualser"
-          if sudo systemctl restart rpa-facturas-mutualser; then
-            echo "==> ✓ Restart command succeeded"
-          else
-            echo "==> ✗ Restart command FAILED with exit code $?"
-            exit 1
-          fi
+          echo "==> Restarting service..."
+          sudo systemctl restart rpa-facturas-mutualser
           
-          echo "==> Waiting for service to start..."
+          echo "==> Waiting 3 seconds..."
           sleep 3
           
-          echo "==> Checking service status AFTER restart:"
-          sudo systemctl status rpa-facturas-mutualser --no-pager || true
+          echo "==> Status AFTER restart:"
+          sudo systemctl status rpa-facturas-mutualser --no-pager | head -10
           
           echo "=========================================="
           echo "Deployment complete"
           echo "=========================================="
-          SCRIPT
-          
-          chmod +x /tmp/deploy.sh
-
-      - name: Upload and execute deployment script
-        run: |
-          scp -i ~/.ssh/deploy_key \
-            -o StrictHostKeyChecking=no \
-            /tmp/deploy.sh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/tmp/
-          
-          ssh -i ~/.ssh/deploy_key \
-            -o StrictHostKeyChecking=no \
-            -o ConnectTimeout=15 \
-            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
-            'bash -x /tmp/deploy.sh 2>&1'
+          ENDSSH
 
       - name: Verify deployment
         run: |
           sleep 2
           ssh -i ~/.ssh/deploy_key \
             -o StrictHostKeyChecking=no \
-            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
-            'echo "=========================================="; \
-             echo "Verifying deployment"; \
-             echo "=========================================="; \
-             echo "==> Service Status:"; \
-             sudo systemctl status rpa-facturas-mutualser --no-pager; \
-             echo ""; \
-             echo "==> Recent logs (last 30 lines):"; \
-             tail -30 ~/Projects/rpa-facturas-mutualser/run.log 2>/dev/null || echo "No logs yet"; \
-             echo ""; \
-             echo "==> Process check:"; \
-             pgrep -af "src.main" || echo "Process not found"; \
-             echo ""; \
-             echo "==> Service journal (last 20 lines):"; \
-             sudo journalctl -u rpa-facturas-mutualser -n 20 --no-pager; \
-             echo "=========================================="; \
-             echo "Verification complete"; \
-             echo "=========================================="'
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} 'bash -s' <<'ENDSSH'
+          
+          echo "=========================================="
+          echo "Verification"
+          echo "=========================================="
+          
+          echo "==> Service Status:"
+          sudo systemctl status rpa-facturas-mutualser --no-pager
+          
+          echo ""
+          echo "==> Recent logs:"
+          tail -30 ~/Projects/rpa-facturas-mutualser/run.log 2>/dev/null || echo "No logs"
+          
+          echo ""
+          echo "==> Process check:"
+          pgrep -af "src.main" || echo "Process not found"
+          
+          echo ""
+          echo "==> Journal:"
+          sudo journalctl -u rpa-facturas-mutualser -n 20 --no-pager
+          
+          echo "=========================================="
+          ENDSSH
 
       - name: Cleanup
         if: always()
-        run: |
-          rm -f ~/.ssh/deploy_key
-          ssh -i ~/.ssh/deploy_key \
-            -o StrictHostKeyChecking=no \
-            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
-            'rm -f /tmp/deploy.sh' 2>/dev/null || true
+        run: rm -f ~/.ssh/deploy_key
 
       - name: Deployment summary
         if: success()
