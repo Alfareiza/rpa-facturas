@@ -3,20 +3,170 @@ name: Deploy to VPS
 on:
   push:
     branches: [main]
+  workflow_dispatch:  # Allow manual triggers from GitHub UI
+
+env:
+  DEPLOY_PATH: ~/Projects/rpa-facturas-mutualser
+  SERVICE_NAME: rpa-facturas-mutualser
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
     steps:
-      - name: Set up SSH key
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
         run: |
           install -m 0700 -d ~/.ssh
-          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/github_actions
-          chmod 600 ~/.ssh/github_actions
-          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Deploy, run and verify on VPS
+      - name: Deploy to VPS
         run: |
-          ssh -i ~/.ssh/github_actions -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 \
-            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
-            "cd ~/Projects/rpa-facturas && make deploy && setsid nohup make run >> run.log 2>&1 </dev/null & sleep 4 && echo '--- Verification ---' && (pgrep -af src.main && echo 'Process is running.' && echo '--- Last 20 lines of run.log ---' && tail -20 run.log 2>/dev/null) || (echo 'Process not found.' && echo '--- run.log (if any) ---' && (tail -30 run.log 2>/dev/null || echo 'run.log missing or empty'))"
+          ssh -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=no \
+            -o ConnectTimeout=15 \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'ENDSSH'
+            set -euo pipefail
+            
+            echo "=========================================="
+            echo "Starting deployment for $SERVICE_NAME"
+            echo "=========================================="
+            
+            cd $DEPLOY_PATH
+            
+            # Store current commit for comparison
+            BEFORE_COMMIT=$(git rev-parse HEAD)
+            
+            # Pull latest code
+            echo "==> Pulling latest changes from Git"
+            git pull
+            
+            AFTER_COMMIT=$(git rev-parse HEAD)
+            
+            # Check if there were any updates
+            if [ "$BEFORE_COMMIT" = "$AFTER_COMMIT" ]; then
+              echo "==> No new commits, repository already up to date"
+            else
+              echo "==> Updated from $BEFORE_COMMIT to $AFTER_COMMIT"
+            fi
+            
+            # Ensure virtual environment exists
+            echo "==> Checking virtual environment"
+            if [ ! -d .venv ]; then
+              echo "==> Creating virtual environment"
+              make venv
+              VENV_CREATED=true
+            else
+              VENV_CREATED=false
+            fi
+            
+            # Check if requirements.txt changed or venv was just created
+            REQUIREMENTS_CHANGED=false
+            if [ -f requirements.txt ]; then
+              if [ "$VENV_CREATED" = true ]; then
+                echo "==> New virtual environment created, installing dependencies"
+                REQUIREMENTS_CHANGED=true
+              elif [ "$BEFORE_COMMIT" != "$AFTER_COMMIT" ]; then
+                # Check if requirements.txt changed between commits
+                if git diff --name-only $BEFORE_COMMIT $AFTER_COMMIT | grep -q "^requirements.txt$"; then
+                  echo "==> requirements.txt changed, updating dependencies"
+                  REQUIREMENTS_CHANGED=true
+                else
+                  echo "==> requirements.txt unchanged, skipping dependency installation"
+                fi
+              else
+                echo "==> No code changes, skipping dependency check"
+              fi
+              
+              # Install dependencies if needed
+              if [ "$REQUIREMENTS_CHANGED" = true ]; then
+                .venv/bin/pip install -r requirements.txt --upgrade
+              fi
+            else
+              echo "==> No requirements.txt found, skipping dependency installation"
+            fi
+            
+            # Restart the service
+            echo "==> Restarting service"
+            sudo systemctl restart $SERVICE_NAME
+            
+            # Wait for service to start
+            echo "==> Waiting for service to start..."
+            sleep 3
+            
+            echo "=========================================="
+            echo "Deployment complete"
+            echo "=========================================="
+          ENDSSH
+        env:
+          DEPLOY_PATH: ${{ env.DEPLOY_PATH }}
+          SERVICE_NAME: ${{ env.SERVICE_NAME }}
+
+      - name: Verify deployment
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=no \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'ENDSSH'
+            set -euo pipefail
+            
+            echo "=========================================="
+            echo "Verifying deployment"
+            echo "=========================================="
+            
+            # Check service status
+            echo "==> Service Status:"
+            if sudo systemctl is-active --quiet $SERVICE_NAME; then
+              echo "✓ Service is running"
+              sudo systemctl status $SERVICE_NAME --no-pager --lines=5
+            else
+              echo "✗ Service is NOT running!"
+              sudo systemctl status $SERVICE_NAME --no-pager --lines=10
+              exit 1
+            fi
+            
+            # Show recent logs
+            echo ""
+            echo "==> Recent logs (last 20 lines):"
+            tail -20 $DEPLOY_PATH/run.log 2>/dev/null || echo "No logs yet"
+            
+            # Check for Python process
+            echo ""
+            echo "==> Process check:"
+            if pgrep -af "src.main"; then
+              echo "✓ Python process confirmed running"
+            else
+              echo "⚠ Warning: Process not found in pgrep"
+            fi
+            
+            echo "=========================================="
+            echo "Verification complete"
+            echo "=========================================="
+          ENDSSH
+        env:
+          DEPLOY_PATH: ${{ env.DEPLOY_PATH }}
+          SERVICE_NAME: ${{ env.SERVICE_NAME }}
+
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
+
+      - name: Deployment summary
+        if: success()
+        run: |
+          echo "✅ Deployment successful!"
+          echo "Service: ${{ env.SERVICE_NAME }}"
+          echo "Path: ${{ env.DEPLOY_PATH }}"
+
+      - name: Deployment failed
+        if: failure()
+        run: |
+          echo "❌ Deployment failed!"
+          echo "Check the logs above for details."
+          echo "You can manually check the service with:"
+          echo "  sudo systemctl status ${{ env.SERVICE_NAME }}"
+          echo "  tail -50 ${{ env.DEPLOY_PATH }}/run.log"
