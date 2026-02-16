@@ -15,15 +15,8 @@ jobs:
           chmod 600 ~/.ssh/github_actions
           ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
 
-      - name: Deploy and run on VPS
+      - name: Deploy, run and verify on VPS
         run: |
-          ssh -i ~/.ssh/github_actions -o StrictHostKeyChecking=accept-new \
+          ssh -i ~/.ssh/github_actions -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 \
             ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
-            "cd ~/Projects/rpa-facturas && make deploy && setsid nohup make run >> run.log 2>&1 </dev/null &"
-
-      - name: Verify script is running
-        run: |
-          sleep 3
-          ssh -i ~/.ssh/github_actions -o StrictHostKeyChecking=no \
-            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
-            "cd ~/Projects/rpa-facturas && (pgrep -af src.main && echo '--- Last 20 lines of run.log ---' && tail -20 run.log 2>/dev/null) || (echo 'Process not found.'; echo '--- run.log (if any) ---'; tail -30 run.log 2>/dev/null || echo 'run.log missing or empty')"
+            "cd ~/Projects/rpa-facturas && make deploy && setsid nohup make run >> run.log 2>&1 </dev/null & sleep 4 && echo '--- Verification ---' && (pgrep -af src.main && echo 'Process is running.' && echo '--- Last 20 lines of run.log ---' && tail -20 run.log 2>/dev/null) || (echo 'Process not found.' && echo '--- run.log (if any) ---' && (tail -30 run.log 2>/dev/null || echo 'run.log missing or empty'))"
