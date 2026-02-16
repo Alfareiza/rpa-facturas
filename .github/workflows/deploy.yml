@@ -28,29 +28,29 @@ jobs:
 
       - name: Deploy to VPS
         run: |
-            ssh -i ~/.ssh/deploy_key \
+          ssh -i ~/.ssh/deploy_key \
             -o StrictHostKeyChecking=no \
             -o ConnectTimeout=15 \
             ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
-            'cd ~/Projects/rpa-facturas-mutualser && \
-             exec > /tmp/deploy.log 2>&1 && \
-             date && \
-             git fetch origin main && \
-             git reset --hard origin/main && \
-             sudo systemctl restart rpa-facturas-mutualser && \
-             sleep 3 && \
-             sudo systemctl show rpa-facturas-mutualser -p ActiveEnterTimestamp && \
-             sudo systemctl status rpa-facturas-mutualser --no-pager | head -5 && \
-             cat /tmp/deploy.log'
+            "bash -c 'cd ~/Projects/rpa-facturas-mutualser && \
+             { \
+               date && \
+               git fetch origin main && \
+               git reset --hard origin/main && \
+               sudo systemctl restart rpa-facturas-mutualser && \
+               sleep 3 && \
+               sudo systemctl show rpa-facturas-mutualser -p ActiveEnterTimestamp && \
+               sudo systemctl status rpa-facturas-mutualser --no-pager | head -5; \
+             } 2>&1'"
 
       - name: Verify deployment
         run: |
           ssh -i ~/.ssh/deploy_key \
             -o StrictHostKeyChecking=no \
             ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
-            'date -u && \
+            "bash -c 'date -u && \
              sudo systemctl show rpa-facturas-mutualser -p ActiveEnterTimestamp && \
-             pgrep -af src.main || echo "Process not found"'
+             pgrep -af src.main || echo \"Process not found\"'"
 
       - name: Cleanup
         if: always()
