@@ -20,57 +20,43 @@ jobs:
 
       - name: Setup SSH
         run: |
-          install -m 0700 -d ~/.ssh
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
           echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts 2>&1
 
       - name: Deploy to VPS
         run: |
-          ssh -tt -i ~/.ssh/deploy_key \
+          ssh -i ~/.ssh/deploy_key \
             -o StrictHostKeyChecking=no \
             -o ConnectTimeout=15 \
-            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
-            "cd ~/Projects/rpa-facturas-mutualser && \
-             echo '=========================================='; \
-             echo 'Starting deployment'; \
-             echo '=========================================='; \
-             git pull; \
-             echo '==> Restarting service...'; \
-             sudo systemctl restart rpa-facturas-mutualser; \
-             sleep 3; \
-             echo '==> Service restarted'; \
-             sudo systemctl status rpa-facturas-mutualser --no-pager | head -5; \
-             echo '==========================================';"
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
+          set -x
+          cd ~/Projects/rpa-facturas-mutualser
+          echo "=========================================="
+          echo "Deploying..."
+          echo "=========================================="
+          git pull
+          sudo systemctl restart rpa-facturas-mutualser
+          sleep 3
+          sudo systemctl status rpa-facturas-mutualser --no-pager
+          echo "=========================================="
+          echo "Deploy complete"
+          echo "=========================================="
+          EOF
 
-      - name: Verify deployment  
+      - name: Verify
         run: |
-          sleep 2
-          ssh -tt -i ~/.ssh/deploy_key \
+          ssh -i ~/.ssh/deploy_key \
             -o StrictHostKeyChecking=no \
-            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
-            "echo '=========================================='; \
-             echo 'Verification'; \
-             echo '=========================================='; \
-             sudo systemctl status rpa-facturas-mutualser --no-pager; \
-             echo ''; \
-             echo 'Recent logs:'; \
-             tail -20 ~/Projects/rpa-facturas-mutualser/run.log 2>/dev/null || echo 'No logs'; \
-             echo ''; \
-             pgrep -af 'src.main' || echo 'Process not found'; \
-             echo '==========================================';"
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
+          echo "Checking service..."
+          sudo systemctl is-active rpa-facturas-mutualser && echo "Service is running" || echo "Service is NOT running"
+          tail -10 ~/Projects/rpa-facturas-mutualser/run.log 2>/dev/null || echo "No logs"
+          pgrep -af src.main || echo "Process not found"
+          EOF
 
       - name: Cleanup
         if: always()
         run: rm -f ~/.ssh/deploy_key
-
-      - name: Deployment summary
-        if: success()
-        run: |
-          echo "✅ Deployment successful!"
-          echo "Service: ${{ env.SERVICE_NAME }}"
-          echo "Path: ${{ env.DEPLOY_PATH }}"
-
-      - name: Deployment failed
-        if: failure()
-        run: echo "❌ Deployment failed!"
