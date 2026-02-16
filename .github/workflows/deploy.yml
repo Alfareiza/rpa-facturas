@@ -82,7 +82,7 @@ jobs:
              echo '==========================================' && \
              echo 'Deployment complete' && \
              echo '==========================================' \
-            "
+            " 2>&1
 
       - name: Verify deployment
         run: |
