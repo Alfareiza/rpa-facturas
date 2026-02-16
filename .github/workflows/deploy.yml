@@ -19,4 +19,11 @@ jobs:
         run: |
           ssh -i ~/.ssh/github_actions -o StrictHostKeyChecking=accept-new \
             ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
-            "cd ~/Projects/rpa-facturas && make deploy && nohup make run >> run.log &"
+            "cd ~/Projects/rpa-facturas && make deploy && setsid nohup make run >> run.log 2>&1 </dev/null &"
+
+      - name: Verify script is running
+        run: |
+          sleep 3
+          ssh -i ~/.ssh/github_actions -o StrictHostKeyChecking=no \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+            "cd ~/Projects/rpa-facturas && (pgrep -af src.main && echo '--- Last 20 lines of run.log ---' && tail -20 run.log 2>/dev/null) || (echo 'Process not found.'; echo '--- run.log (if any) ---'; tail -30 run.log 2>/dev/null || echo 'run.log missing or empty')"
