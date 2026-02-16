@@ -1,3 +1,4 @@
+"""Main module for the RPA Facturas project."""
 from datetime import datetime
 from http.client import HTTPException
 from pathlib import Path
