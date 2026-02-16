@@ -3,7 +3,7 @@ name: Deploy to VPS
 on:
   push:
     branches: [main]
-  workflow_dispatch:  # Allow manual triggers from GitHub UI
+  workflow_dispatch:
 
 env:
   DEPLOY_PATH: ~/Projects/rpa-facturas-mutualser
@@ -30,70 +30,120 @@ jobs:
           ssh -i ~/.ssh/deploy_key \
             -o StrictHostKeyChecking=no \
             -o ConnectTimeout=15 \
-            -o ServerAliveInterval=5 \
-            -o ServerAliveCountMax=3 \
-            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
-            "cd ${{ env.DEPLOY_PATH }} && \
-             echo '==========================================' && \
-             echo 'Starting deployment for ${{ env.SERVICE_NAME }}' && \
-             echo '==========================================' && \
-             BEFORE_COMMIT=\$(git rev-parse HEAD) && \
-             echo '==> Pulling latest changes from Git' && \
-             git pull && \
-             AFTER_COMMIT=\$(git rev-parse HEAD) && \
-             if [ \"\$BEFORE_COMMIT\" = \"\$AFTER_COMMIT\" ]; then \
-               echo '==> No new commits, repository already up to date'; \
-             else \
-               echo \"==> Updated from \$BEFORE_COMMIT to \$AFTER_COMMIT\"; \
-             fi && \
-             echo '==> Checking virtual environment' && \
-             if [ ! -d .venv ]; then \
-               echo '==> Creating virtual environment' && \
-               make venv && \
-               VENV_CREATED=true; \
-             else \
-               VENV_CREATED=false; \
-             fi && \
-             REQUIREMENTS_CHANGED=false && \
-             if [ -f requirements.txt ]; then \
-               if [ \"\$VENV_CREATED\" = true ]; then \
-                 echo '==> New virtual environment created, installing dependencies' && \
-                 REQUIREMENTS_CHANGED=true; \
-               elif [ \"\$BEFORE_COMMIT\" != \"\$AFTER_COMMIT\" ]; then \
-                 if git diff --name-only \$BEFORE_COMMIT \$AFTER_COMMIT | grep -q '^requirements.txt$'; then \
-                   echo '==> requirements.txt changed, updating dependencies' && \
-                   REQUIREMENTS_CHANGED=true; \
-                 else \
-                   echo '==> requirements.txt unchanged, skipping dependency installation'; \
-                 fi; \
-               else \
-                 echo '==> No code changes, skipping dependency check'; \
-               fi && \
-               if [ \"\$REQUIREMENTS_CHANGED\" = true ]; then \
-                 .venv/bin/pip install -r requirements.txt --upgrade; \
-               fi; \
-             else \
-               echo '==> No requirements.txt found, skipping dependency installation'; \
-             fi && \
-             echo '==> Restarting service' && \
-             sudo systemctl restart ${{ env.SERVICE_NAME }} && \
-             echo '==> Waiting for service to start...' && \
-             sleep 3 && \
-             echo '==========================================' && \
-             echo 'Deployment complete' && \
-             echo '==========================================' \
-            " 2>&1
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} bash -s << 'EOF'
+          set -x  # Enable debug output
+          
+          cd ${{ env.DEPLOY_PATH }}
+          
+          echo "=========================================="
+          echo "Starting deployment for ${{ env.SERVICE_NAME }}"
+          echo "=========================================="
+          
+          BEFORE_COMMIT=$(git rev-parse HEAD)
+          echo "Current commit: $BEFORE_COMMIT"
+          
+          echo "==> Pulling latest changes from Git"
+          git pull
+          
+          AFTER_COMMIT=$(git rev-parse HEAD)
+          
+          if [ "$BEFORE_COMMIT" = "$AFTER_COMMIT" ]; then
+            echo "==> No new commits, repository already up to date"
+          else
+            echo "==> Updated from $BEFORE_COMMIT to $AFTER_COMMIT"
+          fi
+          
+          echo "==> Checking virtual environment"
+          if [ ! -d .venv ]; then
+            echo "==> Creating virtual environment"
+            make venv
+            VENV_CREATED=true
+          else
+            echo "==> Virtual environment already exists"
+            VENV_CREATED=false
+          fi
+          
+          REQUIREMENTS_CHANGED=false
+          if [ -f requirements.txt ]; then
+            if [ "$VENV_CREATED" = true ]; then
+              echo "==> New virtual environment created, installing dependencies"
+              REQUIREMENTS_CHANGED=true
+            elif [ "$BEFORE_COMMIT" != "$AFTER_COMMIT" ]; then
+              if git diff --name-only $BEFORE_COMMIT $AFTER_COMMIT | grep -q '^requirements.txt$'; then
+                echo "==> requirements.txt changed, updating dependencies"
+                REQUIREMENTS_CHANGED=true
+              else
+                echo "==> requirements.txt unchanged, skipping dependency installation"
+              fi
+            else
+              echo "==> No code changes, skipping dependency check"
+            fi
+            
+            if [ "$REQUIREMENTS_CHANGED" = true ]; then
+              echo "==> Installing dependencies..."
+              .venv/bin/pip install -r requirements.txt --upgrade
+            fi
+          else
+            echo "==> No requirements.txt found"
+          fi
+          
+          echo "==> About to restart service: ${{ env.SERVICE_NAME }}"
+          echo "==> Checking service status BEFORE restart:"
+          sudo systemctl status ${{ env.SERVICE_NAME }} --no-pager | head -5
+          
+          echo "==> Running: sudo systemctl restart ${{ env.SERVICE_NAME }}"
+          if sudo systemctl restart ${{ env.SERVICE_NAME }}; then
+            echo "==> ✓ Restart command succeeded"
+          else
+            echo "==> ✗ Restart command FAILED with exit code $?"
+            exit 1
+          fi
+          
+          echo "==> Waiting for service to start..."
+          sleep 3
+          
+          echo "==> Checking service status AFTER restart:"
+          sudo systemctl status ${{ env.SERVICE_NAME }} --no-pager
+          
+          echo "=========================================="
+          echo "Deployment complete"
+          echo "=========================================="
+          EOF
 
       - name: Verify deployment
         run: |
           sleep 2
           ssh -i ~/.ssh/deploy_key \
             -o StrictHostKeyChecking=no \
-            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
-            'sudo systemctl status rpa-facturas-mutualser --no-pager'
-        env:
-          DEPLOY_PATH: ${{ env.DEPLOY_PATH }}
-          SERVICE_NAME: ${{ env.SERVICE_NAME }}
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} bash -s << 'EOF'
+          
+          echo "=========================================="
+          echo "Verifying deployment"
+          echo "=========================================="
+          
+          echo "==> Service Status:"
+          sudo systemctl status ${{ env.SERVICE_NAME }} --no-pager
+          
+          echo ""
+          echo "==> Recent logs (last 30 lines):"
+          tail -30 ${{ env.DEPLOY_PATH }}/run.log 2>/dev/null || echo "No logs yet"
+          
+          echo ""
+          echo "==> Process check:"
+          if pgrep -af 'src.main'; then
+            echo "✓ Python process confirmed running"
+          else
+            echo "⚠ Warning: Process not found in pgrep"
+          fi
+          
+          echo ""
+          echo "==> Service journal (last 20 lines):"
+          sudo journalctl -u ${{ env.SERVICE_NAME }} -n 20 --no-pager
+          
+          echo "=========================================="
+          echo "Verification complete"
+          echo "=========================================="
+          EOF
 
       - name: Cleanup SSH key
         if: always()
@@ -111,6 +161,3 @@ jobs:
         run: |
           echo "❌ Deployment failed!"
           echo "Check the logs above for details."
-          echo "You can manually check the service with:"
-          echo "  sudo systemctl status ${{ env.SERVICE_NAME }}"
-          echo "  tail -50 ${{ env.DEPLOY_PATH }}/run.log"
