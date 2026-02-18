@@ -13,7 +13,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -31,35 +31,44 @@ jobs:
           ssh -i ~/.ssh/deploy_key \
             -o StrictHostKeyChecking=no \
             -o ConnectTimeout=15 \
-            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'ENDSSH'
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} 'bash -s' << 'ENDSSH'
           set -e
           cd ~/Projects/rpa-facturas-mutualser
-          
+
           echo "=== BEFORE RESTART ==="
           BEFORE_TIMESTAMP=$(sudo systemctl show rpa-facturas-mutualser -p ActiveEnterTimestamp --value)
           echo "ActiveEnterTimestamp BEFORE: $BEFORE_TIMESTAMP"
-          
+
           echo "=== PULLING LATEST CODE ==="
           git fetch origin main
           git reset --hard origin/main
           echo "Git pull completed"
-          
+
           echo "=== RESTARTING SERVICE ==="
           sudo systemctl restart rpa-facturas-mutualser
           sleep 3
-          
+
           echo "=== AFTER RESTART ==="
           AFTER_TIMESTAMP=$(sudo systemctl show rpa-facturas-mutualser -p ActiveEnterTimestamp --value)
           echo "ActiveEnterTimestamp AFTER: $AFTER_TIMESTAMP"
-          
-          echo "=== VALIDATION ==="
+
+          echo "=== VALIDATION (timestamp changed) ==="
           if [ "$BEFORE_TIMESTAMP" != "$AFTER_TIMESTAMP" ]; then
             echo "✅ Service was successfully restarted (timestamp changed)"
           else
             echo "❌ WARNING: Timestamp unchanged - service may not have restarted properly"
             exit 1
           fi
-          
+
+          echo "=== VALIDATION (service active) ==="
+          ACTIVE_STATE=$(sudo systemctl is-active rpa-facturas-mutualser)
+          if [ "$ACTIVE_STATE" = "active" ]; then
+            echo "✅ Service state is active"
+          else
+            echo "❌ Service is not active (state: $ACTIVE_STATE)"
+            exit 1
+          fi
+
           echo "=== SERVICE STATUS ==="
           sudo systemctl status rpa-facturas-mutualser --no-pager | head -10
           ENDSSH
@@ -68,7 +77,16 @@ jobs:
         run: |
           ssh -i ~/.ssh/deploy_key \
             -o StrictHostKeyChecking=no \
-            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'ENDSSH'
+            -o ConnectTimeout=15 \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} 'bash -s' << 'ENDSSH'
+          echo "=== SERVICE ACTIVE CHECK ==="
+          ACTIVE_STATE=$(sudo systemctl is-active rpa-facturas-mutualser)
+          if [ "$ACTIVE_STATE" != "active" ]; then
+            echo "❌ Service not active (state: $ACTIVE_STATE)"
+            exit 1
+          fi
+          echo "✅ Service is active"
+
           echo "=== PROCESS CHECK ==="
           if pgrep -af src.main; then
             echo "✅ Process is running"
