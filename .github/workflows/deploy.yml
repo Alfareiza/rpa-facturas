@@ -31,26 +31,52 @@ jobs:
           ssh -i ~/.ssh/deploy_key \
             -o StrictHostKeyChecking=no \
             -o ConnectTimeout=15 \
-            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
-            "bash -c 'cd ~/Projects/rpa-facturas-mutualser && \
-             { \
-               date && \
-               git fetch origin main && \
-               git reset --hard origin/main && \
-               sudo systemctl restart rpa-facturas-mutualser && \
-               sleep 3 && \
-               sudo systemctl show rpa-facturas-mutualser -p ActiveEnterTimestamp && \
-               sudo systemctl status rpa-facturas-mutualser --no-pager | head -5; \
-             } 2>&1'"
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'ENDSSH'
+          set -e
+          cd ~/Projects/rpa-facturas-mutualser
+          
+          echo "=== BEFORE RESTART ==="
+          BEFORE_TIMESTAMP=$(sudo systemctl show rpa-facturas-mutualser -p ActiveEnterTimestamp --value)
+          echo "ActiveEnterTimestamp BEFORE: $BEFORE_TIMESTAMP"
+          
+          echo "=== PULLING LATEST CODE ==="
+          git fetch origin main
+          git reset --hard origin/main
+          echo "Git pull completed"
+          
+          echo "=== RESTARTING SERVICE ==="
+          sudo systemctl restart rpa-facturas-mutualser
+          sleep 3
+          
+          echo "=== AFTER RESTART ==="
+          AFTER_TIMESTAMP=$(sudo systemctl show rpa-facturas-mutualser -p ActiveEnterTimestamp --value)
+          echo "ActiveEnterTimestamp AFTER: $AFTER_TIMESTAMP"
+          
+          echo "=== VALIDATION ==="
+          if [ "$BEFORE_TIMESTAMP" != "$AFTER_TIMESTAMP" ]; then
+            echo "✅ Service was successfully restarted (timestamp changed)"
+          else
+            echo "❌ WARNING: Timestamp unchanged - service may not have restarted properly"
+            exit 1
+          fi
+          
+          echo "=== SERVICE STATUS ==="
+          sudo systemctl status rpa-facturas-mutualser --no-pager | head -10
+          ENDSSH
 
-      - name: Verify deployment
+      - name: Verify process is running
         run: |
           ssh -i ~/.ssh/deploy_key \
             -o StrictHostKeyChecking=no \
-            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
-            "bash -c 'date -u && \
-             sudo systemctl show rpa-facturas-mutualser -p ActiveEnterTimestamp && \
-             pgrep -af src.main || echo \"Process not found\"'"
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'ENDSSH'
+          echo "=== PROCESS CHECK ==="
+          if pgrep -af src.main; then
+            echo "✅ Process is running"
+          else
+            echo "❌ Process not found"
+            exit 1
+          fi
+          ENDSSH
 
       - name: Cleanup
         if: always()
