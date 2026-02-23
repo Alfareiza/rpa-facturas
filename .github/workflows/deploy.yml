@@ -40,13 +40,14 @@ jobs:
           echo "ActiveEnterTimestamp BEFORE: $BEFORE_TIMESTAMP"
 
           echo "=== PULLING LATEST CODE ==="
+          git checkout main
           git fetch origin main
           git reset --hard origin/main
           echo "Git pull completed"
 
           echo "=== RESTARTING SERVICE ==="
-          sudo systemctl restart rpa-facturas-mutualser
-          sleep 3
+          sudo systemctl restart rpa-facturas-mutualser.service
+          sleep 5
 
           echo "=== AFTER RESTART ==="
           AFTER_TIMESTAMP=$(sudo systemctl show rpa-facturas-mutualser -p ActiveEnterTimestamp --value)
@@ -55,6 +56,19 @@ jobs:
           echo "=== VALIDATION (timestamp changed) ==="
           if [ "$BEFORE_TIMESTAMP" != "$AFTER_TIMESTAMP" ]; then
             echo "✅ Service was successfully restarted (timestamp changed)"
+            
+            # Calculate how long the service has been active
+            CURRENT_TIME=$(date +%s)
+            RESTART_TIME=$(date -d "$AFTER_TIMESTAMP" +%s 2>/dev/null || echo "0")
+            if [ "$RESTART_TIME" != "0" ]; then
+              ACTIVE_SECONDS=$((CURRENT_TIME - RESTART_TIME))
+              echo "Service has been active for $ACTIVE_SECONDS seconds"
+              if [ $ACTIVE_SECONDS -lt 60 ]; then
+                echo "✅ Service was recently restarted (active for $ACTIVE_SECONDS seconds)"
+              else
+                echo "⚠️  Service has been active for $ACTIVE_SECONDS seconds (may be an older restart)"
+              fi
+            fi
           else
             echo "❌ WARNING: Timestamp unchanged - service may not have restarted properly"
             exit 1
@@ -71,7 +85,17 @@ jobs:
 
           echo "=== SERVICE STATUS ==="
           sudo systemctl status rpa-facturas-mutualser --no-pager | head -10
+
+          echo "ActiveEnterTimestamp BEFORE: $BEFORE_TIMESTAMP" > ~/Projects/rpa-facturas-mutualser/deploy_timestamps.txt
+          echo "ActiveEnterTimestamp AFTER: $AFTER_TIMESTAMP" >> ~/Projects/rpa-facturas-mutualser/deploy_timestamps.txt
           ENDSSH
+
+      - name: Show restart timestamps
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=no \
+            -o ConnectTimeout=15 \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} 'cat ~/Projects/rpa-facturas-mutualser/deploy_timestamps.txt'
 
       - name: Verify process is running
         run: |
@@ -95,6 +119,13 @@ jobs:
             exit 1
           fi
           ENDSSH
+
+      - name: Show service status on VPS
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=no \
+            -o ConnectTimeout=15 \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} 'echo "=== SERVICE STATUS ===" && sudo systemctl status rpa-facturas-mutualser --no-pager && echo "" && echo "=== ActiveEnterTimestamp ===" && sudo systemctl show rpa-facturas-mutualser -p ActiveEnterTimestamp --value'
 
       - name: Cleanup
         if: always()
