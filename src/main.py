@@ -107,7 +107,7 @@ class Process:
         finally:
             xml_file.unlink(missing_ok=True)
             pdf_file.unlink(missing_ok=True)
-            message.attachment_path.unlink(missing_ok=True)
+            # message.attachment_path.unlink(missing_ok=True)
             self.drive.delete_file(zip_temp)
 
 
