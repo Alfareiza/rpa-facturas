@@ -55,10 +55,7 @@ class GmailAPIReader:
         all_messages = []
         next_page_token = None
         while len(all_messages) < limit:
-            results = self._list_messages(
-                query=f'subject:"{LOGI_NIT};LOGIFARMA SAS;" {GMAIL_QUERY}',
-                next_page_token=next_page_token
-            )
+            results = self._list_messages(query=GMAIL_QUERY, next_page_token=next_page_token)
             messages = results.get('messages', [])
             all_messages.extend([EmailMessage(**message) for message in messages])
             next_page_token = results.get('nextPageToken')

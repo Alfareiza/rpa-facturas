@@ -47,7 +47,6 @@ class Process:
         and yields EmailMessage objects for further processing.
         """
         messages = self.gmail.read_inbox(EMAILS_PER_EXECUTION)
-        # read_lines_to_list = set(self.read_lines_to_list("/Users/alfonso/Projects/rpa-facturas/processed.txt"))
         for idx, message in enumerate(messages, 1):
             log.info(f"{idx}. {message.id} INICIANDO Leyendo e-mail y descargando adjunto")
             try:
@@ -58,12 +57,9 @@ class Process:
                 continue
 
             self.gmail.fetch_email_details(message)
-            # if message.nro_factura in read_lines_to_list:
-            #     log.info(f"{idx}. {message.id} Factura {message.nro_factura} procesada anteriormente, omitiendola")
-            #     continue
             self.run.record[message.nro_factura] = record
             self.gmail.download_attachment(message)
-            yield message
+            yield idx, message
 
     def send_invoice_to_mutual_ser(self, zip_file: Path, nro_factura: str):
         """
@@ -106,19 +102,21 @@ class Process:
             traceback.print_exc()
             log.error(str(e))
         finally:
+            xml_file.unlink(missing_ok=True)
+            pdf_file.unlink(missing_ok=True)
+            message.attachment_path.unlink(missing_ok=True)
             self.drive.delete_file(zip_temp)
 
 
-    def read_email_send_invoice(self):
+    def start(self):
         """
         Main workflow that iterates through emails from the inbox, attempts to upload the invoice for each,
         and handles the outcome. Successful uploads are finalized, and failures are logged.
         """
-        for idx, message in enumerate(self.get_emails(), 1):
+        for idx, message in self.get_emails():
             try:
-                # log.info(f"{idx}. {message.id} {message.nro_factura} {message.fecha_factura} Enviando a Mutualser")
-                # self.send_invoice_to_mutual_ser(message.attachment_path, message.nro_factura)
-                ...
+                log.info(f"{idx}. {message.id} {message.nro_factura} {message.fecha_factura} Enviando a Mutualser")
+                self.send_invoice_to_mutual_ser(message.attachment_path, message.nro_factura)
             except FileNotFoundError:
                 self.post_exception(message, Reasons.FILE_NOT_FOUND_MUTUAL_SER)
             except FacturaCargadaSinExito as e:
@@ -129,7 +127,7 @@ class Process:
                 self.finish(idx, message)
             finally:
                 message.delete_files()
-                log.info(f"{20 * '=='}\n")
+                log.info(f"{10 * '=='} FIN FACTURA {message.nro_factura} {10 * '=='}\n")
 
     def finish(self, idx: int, message: EmailMessage):
         """
@@ -138,12 +136,11 @@ class Process:
         2. Upload the invoice to Google Drive.
         3. Set the status for report purposes.
         """
-        log.info(f"{idx}. {message.id} XML y PDF de factura {message.nro_factura} de {message.fecha_factura} siendo cargados al Drive")
-        # self.gmail.mark_as_read(message.id)
-        self.run.record[message.nro_factura].status = Reasons.UPLOADED_MUTUAL_SER
-        # self.drive.upload_file(message.extract_and_rename_pdf(), self.drive.facturas_pdf)
+        # log.info(f"{idx}. {message.id} {message.nro_factura} {message.fecha_factura} XML y PDF siendo cargados al drive")
         self.process_xmls_and_pdf(message)
-        # self.run.record[message.nro_factura].update(nro_factura=message.nro_factura)
+        self.gmail.mark_as_read(message.id)
+        self.run.record[message.nro_factura].status = Reasons.UPLOADED_MUTUAL_SER
+        # self.run.record[message.nro_factura].update(nro_factura=message.nro_factura)  # Supabase stuff
         log.info(f"{idx}. {message.id} {message.nro_factura} {message.fecha_factura} FINALIZADO")
 
     def post_exception(self, message: EmailMessage, reason: str):
@@ -154,7 +151,7 @@ class Process:
         """
         self.run.record[message.nro_factura].status = Reasons.INVOCE_UPLOADED_WITH_ERROR
         self.run.record[message.nro_factura].errors.append(reason)
-        # self.run.record[message.nro_factura].remove()
+        # self.run.record[message.nro_factura].remove() # Supabase stuff
         self.send_mail(message, reason)
 
     def send_mail(self, message: EmailMessage, reason: str):
@@ -212,7 +209,7 @@ def run_process():
     log.info("SCHEDULER: Iniciando nuevo procesamiento de facturas.")
     p = Process()
     try:
-        p.read_email_send_invoice()
+        p.start()
     except Exception as e:
         import traceback;traceback.print_exc()
     ordered_records = p.run.order_by_fecha_factura()
