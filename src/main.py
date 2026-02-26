@@ -93,7 +93,9 @@ class Process:
             xml_file, pdf_file = self.unzip_files(message.attachment_path)
             xml_file = xml_file.rename(xml_file.parent / f"{message.nro_factura}_{xml_file.stem}.xml")
             pdf_file = pdf_file.rename(pdf_file.parent / f"{message.nro_factura}_{message.valor_factura or ""}.pdf")
-            xml_file = File(xml_file).update_invoice()
+            if message.dt_factura.year < 2026:
+                xml_file = File(xml_file).update_invoice()
+                message.attachment_path = File.zip_files(xml_file, pdf_file)
             folder_name = self.drive.get_facturas_mes_name(message.received_at.date().month,
                                                            message.received_at.date().year)
             self.upload_file_to_drive(pdf_file, folder='PROCESADOS')
@@ -116,6 +118,8 @@ class Process:
         """
         for idx, message in self.get_emails():
             try:
+                log.info(f"{idx}. {message.id} {message.nro_factura} {message.fecha_factura} XML y PDF siendo cargados al drive")
+                self.process_xmls_and_pdf(message)
                 log.info(f"{idx}. {message.id} {message.nro_factura} {message.fecha_factura} Enviando a Mutualser")
                 self.send_invoice_to_mutual_ser(message.attachment_path, message.nro_factura)
             except FileNotFoundError:
@@ -137,9 +141,7 @@ class Process:
         2. Upload the invoice to Google Drive.
         3. Set the status for report purposes.
         """
-        # log.info(f"{idx}. {message.id} {message.nro_factura} {message.fecha_factura} XML y PDF siendo cargados al drive")
-        self.process_xmls_and_pdf(message)
-        self.gmail.mark_as_read(message.id)
+        # self.gmail.mark_as_read(message.id)
         self.run.record[message.nro_factura].status = Reasons.UPLOADED_MUTUAL_SER
         # self.run.record[message.nro_factura].update(nro_factura=message.nro_factura)  # Supabase stuff
         log.info(f"{idx}. {message.id} {message.nro_factura} {message.fecha_factura} FINALIZADO")

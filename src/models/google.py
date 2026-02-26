@@ -62,6 +62,11 @@ class EmailMessage(BaseModel):
         return ""
 
     @property
+    def dt_factura(self):
+        """Convert the date to a UTC-5 date and return it as datetime object."""
+        return convert_utc_to_utc_minus_5(self.received_at)
+
+    @property
     def momento_factura(self) -> Optional[str]:
         """Convert the date to a UTC-5 date and return it as string with the time."""
         if self.received_at:
