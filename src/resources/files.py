@@ -40,6 +40,27 @@ class File:
         processor.process_all()
         return processor.save()
 
+    @classmethod
+    def zip_files(cls, *args: Path) -> Path:
+        """
+        Zips multiple Path objects into a single zip file.
+
+        Args:
+            *args: A variable number of Path objects to be zipped.
+
+        Returns:
+            Path: The path to the newly created zip file.
+        """
+        temp_zip_file = Path(tempfile.mktemp(suffix=".zip"))  # Create a temporary zip file
+
+        with zipfile.ZipFile(temp_zip_file, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for file_path in args:
+                if not file_path.is_file():
+                    log.warning(f"Skipping non-file path: {file_path}")
+                    continue
+                zipf.write(file_path, arcname=file_path.name)
+        return temp_zip_file
+
 
 def delete_file_if_exists(file_path: Path):
     """
