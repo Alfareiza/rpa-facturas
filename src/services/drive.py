@@ -65,7 +65,7 @@ class GoogleDrive:
         """Uploads a file to Google Drive."""
         # Check if file already exists in the folder
         if existing_file := self.file_exists_in_folder(file_path, folder_id):
-            log.info(f"Archivo {file_path.name} existe en Drive")
+            log.info(f"\t[Drive] {file_path.name} no fue cargado porque ya existe")
             # self.delete_file(existing_file.get('id'))
             return existing_file
         
@@ -79,7 +79,7 @@ class GoogleDrive:
             media_body=media,
             fields='id'
         ).execute()
-        log.info(f"{file_path.name} cargado en Drive")
+        log.info(f"\t[Drive] {file_path.name} ha sido cargado")
         return file
 
     @retry(stop=stop_after_attempt(10), wait=wait_fixed(1), reraise=True)
