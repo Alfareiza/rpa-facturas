@@ -126,6 +126,7 @@ class XMLHealthInvoiceProcessor:
             new_string = self.codigo_prestador.original_string.replace('<Value>Array</Value>',
                                                                        '<Value>0800185010</Value>')
             self.update_content('codigo_prestador', new_string)
+        log.warning("No fue cambiado <Value> de 'CODIGO_PRESTADOR' porque no existe 'CODIGO_PRESTADOR' en XML")
 
     def logic_modalidad_pago(self):
         if self.modalidad_pago.is_present:
@@ -133,6 +134,8 @@ class XMLHealthInvoiceProcessor:
                 '<Value schemeID="Array" schemeName="salud_modalidad_pago.gc"></Value>',
                 '<Value schemeID="04" schemeName="salud_modalidad_pago.gc">Pago por evento</Value>')
             self.update_content('modalidad_pago', new_string)
+        else:
+            log.warning("No fue cambiado <Value> de 'MODALIDAD_PAGO' porque no existe 'MODALIDAD_PAGO' en XML")
 
     def logic_cobertura(self):
         if self.cobertura.is_present:
@@ -145,6 +148,8 @@ class XMLHealthInvoiceProcessor:
             new_string = self.cobertura.original_string.replace(
                 '<Value schemeID="Array" schemeName="salud_cobertura.gc"></Value>', text)
             self.update_content('cobertura', new_string)
+        else:
+            log.warning("No fue cambiado <Value> de 'COBERTURA_PLAN_BENEFICIOS' porque no existe 'COBERTURA_PLAN_BENEFICIOS' en XML")
 
     def logic_numero_contrato(self):
         if self.numero_contrato.is_present:
@@ -156,11 +161,15 @@ class XMLHealthInvoiceProcessor:
                 return
             new_string = self.numero_contrato.original_string.replace('<Value>Array</Value>', new_string)
             self.update_content('numero_contrato', new_string)
+        else:
+            log.warning("No fue cambiado <Value> de 'NUMERO_CONTRATO' porque no existe 'NUMERO_CONTRATO' en XML")
 
     def logic_numero_poliza(self):
         if self.numero_poliza.is_present:
             new_string = self.numero_poliza.original_string.replace('<Value>Array</Value>', '<Value>NA</Value>')
             self.update_content('numero_poliza', new_string)
+        else:
+            log.warning("No fue cambiado <Value> de 'NUMERO_POLIZA' porque no existe 'NUMERO_POLIZA' en XML")
 
     def logic_invoice_period(self):
         if self.is_invoice_period_present:
