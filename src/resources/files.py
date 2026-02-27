@@ -41,7 +41,7 @@ class File:
         return processor.save()
 
     @classmethod
-    def zip_files(cls, *args: Path) -> Path:
+    def zip_files(cls, *args: Path, filename: str | None = None) -> Path:
         """
         Zips multiple Path objects into a single zip file.
 
@@ -59,6 +59,10 @@ class File:
                     log.warning(f"Skipping non-file path: {file_path}")
                     continue
                 zipf.write(file_path, arcname=file_path.name)
+        if filename:
+            new_path = temp_zip_file.with_name(f"{filename.removesuffix('.zip')}.zip")
+            temp_zip_file = temp_zip_file.rename(new_path)
+
         return temp_zip_file
 
 

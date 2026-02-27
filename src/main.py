@@ -95,7 +95,7 @@ class Process:
             pdf_file = pdf_file.rename(pdf_file.parent / f"{message.nro_factura}_{message.valor_factura or ""}.pdf")
             if message.dt_factura.year < 2026:
                 xml_file = File(xml_file).update_invoice()
-                message.attachment_path = File.zip_files(xml_file, pdf_file)
+                message.attachment_path = File.zip_files(xml_file, pdf_file, filename=message.attachment_path.stem)
             folder_name = self.drive.get_facturas_mes_name(message.received_at.date().month,
                                                            message.received_at.date().year)
             self.upload_file_to_drive(pdf_file, folder='PROCESADOS')
@@ -141,7 +141,7 @@ class Process:
         2. Upload the invoice to Google Drive.
         3. Set the status for report purposes.
         """
-        # self.gmail.mark_as_read(message.id)
+        self.gmail.mark_as_read(message.id)
         self.run.record[message.nro_factura].status = Reasons.UPLOADED_MUTUAL_SER
         # self.run.record[message.nro_factura].update(nro_factura=message.nro_factura)  # Supabase stuff
         log.info(f"{idx}. {message.id} {message.nro_factura} {message.fecha_factura} FINALIZADO")
