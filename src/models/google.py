@@ -18,6 +18,7 @@ class EmailMessage(BaseModel):
     subject: Optional[str] = None
     seen: bool = False
     received_at: Optional[datetime] = None
+    dt_factura: Optional[datetime] = None
     body_html: Optional[str] = None
     recipient: Optional[str] = None
     attachment_path: Optional[Path] = None
@@ -55,16 +56,19 @@ class EmailMessage(BaseModel):
         return None
 
     @property
-    def fecha_factura(self) -> Optional[str]:
+    def fecha_correo_recibido(self) -> Optional[str]:
         """Convert the date to a UTC-5 date and return it as string"""
         if self.received_at:
             return f"{convert_utc_to_utc_minus_5(self.received_at):%d/%m/%Y}"
         return ""
 
     @property
-    def dt_factura(self):
-        """Convert the date to a UTC-5 date and return it as datetime object."""
-        return convert_utc_to_utc_minus_5(self.received_at)
+    def dt_factura_str(self):
+        """Convert the date and return it as string"""
+        if self.dt_factura:
+            return f"{self.dt_factura:%d/%m/%Y}"
+        return ""
+
 
     @property
     def momento_factura(self) -> Optional[str]:

@@ -54,7 +54,7 @@ class Reasons:
 
 class Subjects:
     BASIC = "{nro_factura} - Error cargando factura en Mutualser"
-    INCONSISTENCY_TOTAL_INVOICE = "{nro_factura} (del {fecha_factura}) - Factura rechazada por Mutualser por inconsistencia en el valor total"
+    INCONSISTENCY_TOTAL_INVOICE = "{nro_factura} (recibida el {fecha_correo_recibido}) - Factura rechazada por Mutualser por inconsistencia en el valor total"
     RETRY_FAILED = "{nro_factura} - No se pudo cargar la factura después de varios intentos"
 
     @classmethod

@@ -48,18 +48,19 @@ class Process:
         """
         messages = self.gmail.read_inbox(EMAILS_PER_EXECUTION)
         for idx, message in enumerate(messages, 1):
-            log.info(f"{idx}. {message.id} INICIANDO Leyendo e-mail y descargando adjunto")
+            # log.info(f"{idx}. INICIANDO Leyendo e-mail y descargando adjunto")
             try:
                 record = Record(email=message)
                 # record.save()
             except DuplicatedRow:
                 log.info(f"{idx}. {message.id} Procesado anteriormente")
                 continue
-
             self.gmail.fetch_email_details(message)
+            log.info(f"{10 * '⬇️'} INICIO FACTURA {message.nro_factura} {10 * '⬇️'}")
             self.run.record[message.nro_factura] = record
             self.gmail.download_attachment(message)
             yield idx, message
+            log.info(f"{7 * '⬆️'}  FIN FACTURA {message.nro_factura} del {message.dt_factura_str} {7 * '⬆️'}\n")
 
     def send_invoice_to_mutual_ser(self, zip_file: Path, nro_factura: str):
         """
@@ -90,6 +91,7 @@ class Process:
         try:
             zip_temp = self.upload_file_to_drive(message.attachment_path, folder='TMP')
             xml_file, pdf_file = self.unzip_files(message.attachment_path)
+            message.dt_factura = File(xml_file).get_fecha_factura()
             xml_file = xml_file.rename(xml_file.parent / f"{message.nro_factura}_{xml_file.stem}.xml")
             pdf_file = pdf_file.rename(pdf_file.parent / f"{message.nro_factura}_{message.valor_factura or ""}.pdf")
             if message.dt_factura.year < 2026:
@@ -109,7 +111,6 @@ class Process:
             # message.attachment_path.unlink(missing_ok=True)
             self.drive.delete_file(zip_temp)
 
-
     def start(self):
         """
         Main workflow that iterates through emails from the inbox, attempts to upload the invoice for each,
@@ -117,9 +118,10 @@ class Process:
         """
         for idx, message in self.get_emails():
             try:
-                log.info(f"{idx}. {message.id} {message.nro_factura} {message.fecha_factura} XML y PDF siendo cargados al drive")
+                log.info(f"{idx}. {message.nro_factura} recibida el {message.fecha_correo_recibido}"
+                         f" XML y PDF siendo cargados al drive")
                 self.process_xmls_and_pdf(message)
-                log.info(f"{idx}. {message.id} {message.nro_factura} {message.fecha_factura} Enviando a Mutualser")
+                # log.info(f"\t{idx}. {message.nro_factura} {message.dt_factura_str} Enviando a Mutualser")
                 self.send_invoice_to_mutual_ser(message.attachment_path, message.nro_factura)
             except FileNotFoundError:
                 self.post_exception(message, Reasons.FILE_NOT_FOUND_MUTUAL_SER)
@@ -131,7 +133,6 @@ class Process:
                 self.finish(idx, message)
             finally:
                 message.delete_files()
-                log.info(f"{10 * '=='} FIN FACTURA {message.nro_factura} {10 * '=='}\n")
 
     def finish(self, idx: int, message: EmailMessage):
         """
@@ -143,7 +144,7 @@ class Process:
         self.gmail.mark_as_read(message.id)
         self.run.record[message.nro_factura].status = Reasons.UPLOADED_MUTUAL_SER
         # self.run.record[message.nro_factura].update(nro_factura=message.nro_factura)  # Supabase stuff
-        log.info(f"{idx}. {message.id} {message.nro_factura} {message.fecha_factura} FINALIZADO")
+        # log.info(f"{idx}. {message.nro_factura} {message.dt_factura_str} FINALIZADO")
 
     def post_exception(self, message: EmailMessage, reason: str):
         """Operations to be executed when an exception is raised.
@@ -158,15 +159,15 @@ class Process:
 
     def send_mail(self, message: EmailMessage, reason: str):
         """Send the email notifying the issue with the invoice."""
-        subject = Subjects.define_subject(message.nro_factura, reason, message.fecha_factura)
+        subject = Subjects.define_subject(message.nro_factura, reason, message.fecha_correo_recibido)
         bcc = '' if 'inconsistencia en el valor total' in subject else None
         try:
             self.gmail.send_email(to=Emails.LOGIFARMA_ADMIN,
-                              bcc=bcc,
-                              subject=subject,
-                              body_vars={'nro_factura': message.nro_factura, 'reason': reason,
-                                         'fecha_factura': message.fecha_factura},
-                              attachment_file=message.attachment_path)
+                                  bcc=bcc,
+                                  subject=subject,
+                                  body_vars={'nro_factura': message.nro_factura, 'reason': reason,
+                                             'fecha_factura': message.dt_factura_str},
+                                  attachment_file=message.attachment_path)
         except HttpError as e:
             log.warning(f"{message.nro_factura} No fue posible enviar correo {subject!r} por error: {str(e)}")
         else:
@@ -180,7 +181,6 @@ class Process:
         """
         df = self.run.make_df()
         self.gs.insert_dataframe(df)
-
 
     def unzip_files(self, zip_file: Path) -> tuple[Path, Path]:
         """Return the paths of the unzipped file which is on temporary folder."""
@@ -200,7 +200,6 @@ class Process:
         return file_id.get('id')
 
 
-
 def run_process():
     """
     Main execution function that orchestrates the entire process.
@@ -213,7 +212,8 @@ def run_process():
     try:
         p.start()
     except Exception as e:
-        import traceback;traceback.print_exc()
+        import traceback;
+        traceback.print_exc()
     ordered_records = p.run.order_by_fecha_factura()
     if ordered_records:
         last_record = ordered_records[0]
