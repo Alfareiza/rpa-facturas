@@ -1,4 +1,6 @@
+from datetime import datetime, date
 import mimetypes
+import re
 
 from src.config import log
 
@@ -33,6 +35,15 @@ class File:
 
             # Construct the full absolute path
             return {filename[-3:]: extract_to / Path(filename) for filename in filenames}
+
+    def get_fecha_factura(self) -> date | None:
+        """Get the factura date from the .xml file."""
+        patterns = {r'FecFac: (\d{4}-\d{2}-\d{2})', r'UUID><cbc:IssueDate>(\d{4}-\d{2}-\d{2})<\/cbc:IssueDate>'}
+        for pattern in patterns:
+            if match := re.search(pattern, self.file_path.read_text(encoding='utf-8')):
+                year, month, day = match.group(1).split('-')
+                return datetime(int(year), int(month), int(day)).date()
+        return None
 
     def update_invoice(self):
         """Update the xml and zip it again."""

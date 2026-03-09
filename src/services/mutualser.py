@@ -412,7 +412,8 @@ class MutualSerAPIClient:
             final_response = self.find_load_status()
             # 7. Poll for the final status of the upload
             log.info(f"{extract_nro_factura_from_file(filepath)} Archivo cargado "
-                     f"con ID de cargue: {final_response.id}: {final_response.model_dump_json()}")
+                     f"con ID de cargue: {final_response.id}")
+                     # f"{final_response.model_dump_json()}")
         except (RequestException, ValueError, AttributeError) as e:
             log.error(f"Could not complete the process: {e}")
             raise
