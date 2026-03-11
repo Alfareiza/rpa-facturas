@@ -12,7 +12,7 @@ gspread
 gspread-dataframe
 gspread-formatting
 pytz
-pandas
+pandas==2.3.1
 supabase
 tenacity
 python-decouple
