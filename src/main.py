@@ -214,6 +214,14 @@ def run_process():
     except Exception as e:
         import traceback;
         traceback.print_exc()
+
+    try:
+        p.register_in_sheets()
+    except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+
     ordered_records = p.run.order_by_fecha_factura()
     if ordered_records:
         last_record = ordered_records[0]
