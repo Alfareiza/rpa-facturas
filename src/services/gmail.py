@@ -61,7 +61,7 @@ class GmailAPIReader:
             next_page_token = results.get('nextPageToken')
             if not next_page_token:
                 break
-        return all_messages[::-1][:limit]
+        return all_messages[:limit]
 
     def fetch_email_details(self, message: EmailMessage) -> None:
         """Fetches the details of an email and updates the EmailMessage object."""
