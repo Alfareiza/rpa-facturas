@@ -146,6 +146,8 @@ class MutualSerAPIClient:
         except JSONDecodeError:
             if endpoint == self.UPLOAD_RIPS_ENDPOINT:
                 return {}
+        except requests.exceptions.SSLError:
+            raise
         except RequestException as e:
             if response and response.status_code in (503,):
                 raise ServiceUnavailableError(f"API de Mutual ser arrojó error: {e}")

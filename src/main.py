@@ -236,11 +236,23 @@ def run_process():
 if __name__ == '__main__':
     # for i, (nro, record) in enumerate(p.run.record.items(), 1):
     #     print(f"{i}. {nro}: {record.email.subject}")
-    run_process()
-    # scheduler = BlockingScheduler()
-    # scheduler.add_job(run_process, 'interval', minutes=60, id='invoice_processing_job')
-    # try:
-    #     scheduler.start()
-    # except (KeyboardInterrupt, SystemExit):
-    #     log.info("Scheduler stopped by user.")
-    #     scheduler.shutdown()
+    # run_process()
+    scheduler = BlockingScheduler(timezone=timezone("America/Bogota"))
+    scheduler.add_job(
+        run_process,
+        'cron',
+        day_of_week='mon-sat',   # Monday to Saturday
+        hour='6-20',             # 6:00 to 20:00 (every hour on the hour)
+        minute=0,
+        id='invoice_processing_job',
+    )
+    # Optional: run once immediately if within allowed window, then follow schedule
+    now = datetime.now(tz=timezone("America/Bogota"))
+    if now.weekday() < 6 and 6 <= now.hour <= 20:  # Mon-Sat, 6–20
+        run_process()
+    try:
+        scheduler.start()
+    except (KeyboardInterrupt, SystemExit):
+        log.info("Scheduler stopped by user.")
+        scheduler.shutdown()
+
