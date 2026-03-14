@@ -3,130 +3,47 @@ name: Deploy to VPS
 on:
   push:
     branches: [main]
-  workflow_dispatch:
-
-env:
-  DEPLOY_PATH: ~/Projects/rpa-facturas-mutualser
-  SERVICE_NAME: rpa-facturas-mutualser
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Deploy and restart service on VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          timeout: 60s
+          script: |
+            set -e
+            cd ~/Projects/rpa-facturas-mutualser
 
-      - name: Setup SSH
-        run: |
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts 2>&1
+            # Capture service start time before restart
+            INITIAL_TS=$(systemctl show rpa-facturas-mutualser.service --property=ActiveEnterTimestamp --value)
+            INITIAL_EPOCH=$(date -d "$INITIAL_TS" +%s)
 
-      - name: Deploy to VPS
-        run: |
-          ssh -i ~/.ssh/deploy_key \
-            -o StrictHostKeyChecking=no \
-            -o ConnectTimeout=15 \
-            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} 'bash -s' << 'ENDSSH'
-          set -e
-          cd ~/Projects/rpa-facturas-mutualser
+            # Reset repo and pull latest
+            git restore .
+            git checkout main
+            git fetch origin main
+            git reset --hard origin/main
 
-          echo "=== BEFORE RESTART ==="
-          BEFORE_TIMESTAMP=$(sudo systemctl show rpa-facturas-mutualser -p ActiveEnterTimestamp --value)
-          echo "ActiveEnterTimestamp BEFORE: $BEFORE_TIMESTAMP"
+            # Restart the service
+            sudo systemctl restart rpa-facturas-mutualser.service
 
-          echo "=== PULLING LATEST CODE ==="
-          git checkout main
-          git fetch origin main
-          git reset --hard origin/main
-          echo "Git pull completed"
+            # Wait for service to be up
+            sleep 5
 
-          echo "=== RESTARTING SERVICE ==="
-          sudo systemctl restart rpa-facturas-mutualser.service
-          sleep 5
+            # Verify restart: new "active since" must be at least 30s after the previous one
+            CURRENT_TS=$(systemctl show rpa-facturas-mutualser.service --property=ActiveEnterTimestamp --value)
+            CURRENT_EPOCH=$(date -d "$CURRENT_TS" +%s)
+            DIFF=$((CURRENT_EPOCH - INITIAL_EPOCH))
 
-          echo "=== AFTER RESTART ==="
-          AFTER_TIMESTAMP=$(sudo systemctl show rpa-facturas-mutualser -p ActiveEnterTimestamp --value)
-          echo "ActiveEnterTimestamp AFTER: $AFTER_TIMESTAMP"
-
-          echo "=== VALIDATION (timestamp changed) ==="
-          if [ "$BEFORE_TIMESTAMP" != "$AFTER_TIMESTAMP" ]; then
-            echo "✅ Service was successfully restarted (timestamp changed)"
-            
-            # Calculate how long the service has been active
-            CURRENT_TIME=$(date +%s)
-            RESTART_TIME=$(date -d "$AFTER_TIMESTAMP" +%s 2>/dev/null || echo "0")
-            if [ "$RESTART_TIME" != "0" ]; then
-              ACTIVE_SECONDS=$((CURRENT_TIME - RESTART_TIME))
-              echo "Service has been active for $ACTIVE_SECONDS seconds"
-              if [ $ACTIVE_SECONDS -lt 60 ]; then
-                echo "✅ Service was recently restarted (active for $ACTIVE_SECONDS seconds)"
-              else
-                echo "⚠️  Service has been active for $ACTIVE_SECONDS seconds (may be an older restart)"
-              fi
+            if [ "$DIFF" -ge 30 ]; then
+              echo "✅ Restart verified: service started $DIFF seconds after previous run"
+              exit 0
+            else
+              echo "❌ Restart verification failed: timestamp diff was ${DIFF}s (expected >= 30s)"
+              exit 1
             fi
-          else
-            echo "❌ WARNING: Timestamp unchanged - service may not have restarted properly"
-            exit 1
-          fi
-
-          echo "=== VALIDATION (service active) ==="
-          ACTIVE_STATE=$(sudo systemctl is-active rpa-facturas-mutualser)
-          if [ "$ACTIVE_STATE" = "active" ]; then
-            echo "✅ Service state is active"
-          else
-            echo "❌ Service is not active (state: $ACTIVE_STATE)"
-            exit 1
-          fi
-
-          echo "=== SERVICE STATUS ==="
-          sudo systemctl status rpa-facturas-mutualser --no-pager | head -10
-
-          echo "ActiveEnterTimestamp BEFORE: $BEFORE_TIMESTAMP" > ~/Projects/rpa-facturas-mutualser/deploy_timestamps.txt
-          echo "ActiveEnterTimestamp AFTER: $AFTER_TIMESTAMP" >> ~/Projects/rpa-facturas-mutualser/deploy_timestamps.txt
-          ENDSSH
-
-      - name: Show restart timestamps
-        run: |
-          ssh -i ~/.ssh/deploy_key \
-            -o StrictHostKeyChecking=no \
-            -o ConnectTimeout=15 \
-            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} 'cat ~/Projects/rpa-facturas-mutualser/deploy_timestamps.txt'
-
-      - name: Verify process is running
-        run: |
-          ssh -i ~/.ssh/deploy_key \
-            -o StrictHostKeyChecking=no \
-            -o ConnectTimeout=15 \
-            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} 'bash -s' << 'ENDSSH'
-          echo "=== SERVICE ACTIVE CHECK ==="
-          ACTIVE_STATE=$(sudo systemctl is-active rpa-facturas-mutualser)
-          if [ "$ACTIVE_STATE" != "active" ]; then
-            echo "❌ Service not active (state: $ACTIVE_STATE)"
-            exit 1
-          fi
-          echo "✅ Service is active"
-
-          echo "=== PROCESS CHECK ==="
-          if pgrep -af src.main; then
-            echo "✅ Process is running"
-          else
-            echo "❌ Process not found"
-            exit 1
-          fi
-          ENDSSH
-
-      - name: Show service status on VPS
-        run: |
-          ssh -i ~/.ssh/deploy_key \
-            -o StrictHostKeyChecking=no \
-            -o ConnectTimeout=15 \
-            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} 'echo "=== SERVICE STATUS ===" && sudo systemctl status rpa-facturas-mutualser --no-pager && echo "" && echo "=== ActiveEnterTimestamp ===" && sudo systemctl show rpa-facturas-mutualser -p ActiveEnterTimestamp --value'
-
-      - name: Cleanup
-        if: always()
-        run: rm -f ~/.ssh/deploy_key
