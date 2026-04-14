@@ -2,7 +2,7 @@
 Procesador de archivos XML para facturación de salud.
 
 Este módulo procesa archivos XML de facturación, realizando modificaciones
-específicas en campos de prestador, modalidad de pago, cobertura y periodos.
+específicas en campos de prestador, modalidad de pago, cobertura_con_array y periodos.
 """
 import re
 from pathlib import Path
@@ -64,15 +64,27 @@ class XMLHealthInvoiceProcessor:
                       parent=self.content)
 
     @property
-    def modalidad_pago(self):
+    def modalidad_pago_con_array(self):
         return TagXML(
             original_string='<Name>MODALIDAD_PAGO</Name>\n                  <Value schemeID="Array" schemeName="salud_modalidad_pago.gc"></Value>',
             parent=self.content)
 
     @property
-    def cobertura(self):
+    def modalidad_pago_con_pago_por_evento(self):
+        return TagXML(
+            original_string='<Name>MODALIDAD_PAGO</Name>\n                  <Value schemeID="Pago por evento" schemeName="salud_modalidad_pago.gc"></Value>',
+            parent=self.content)
+
+    @property
+    def cobertura_con_array(self):
         return TagXML(
             original_string='<Name>COBERTURA_PLAN_BENEFICIOS</Name>\n                  <Value schemeID="Array" schemeName="salud_cobertura.gc"></Value>',
+            parent=self.content)
+
+    @property
+    def cobertura_financiado_con_upc(self):
+        return TagXML(
+            original_string='<Name>COBERTURA_PLAN_BENEFICIOS</Name>\n                  <Value schemeID="Plan de beneficios en salud financiado con UPC" schemeName="salud_cobertura.gc"></Value>',
             parent=self.content)
 
     @property
@@ -126,30 +138,44 @@ class XMLHealthInvoiceProcessor:
             new_string = self.codigo_prestador.original_string.replace('<Value>Array</Value>',
                                                                        '<Value>0800185010</Value>')
             self.update_content('codigo_prestador', new_string)
-        log.warning("\tNo fue cambiado <Value> de 'CODIGO_PRESTADOR' porque no existe 'CODIGO_PRESTADOR' en XML")
+        else:
+            log.warning("\tNo fue cambiado <Value> de 'CODIGO_PRESTADOR' porque no existe 'CODIGO_PRESTADOR' en XML")
 
     def logic_modalidad_pago(self):
-        if self.modalidad_pago.is_present:
-            new_string = self.modalidad_pago.original_string.replace(
+        if self.modalidad_pago_con_array.is_present:
+            new_string = self.modalidad_pago_con_array.original_string.replace(
                 '<Value schemeID="Array" schemeName="salud_modalidad_pago.gc"></Value>',
                 '<Value schemeID="04" schemeName="salud_modalidad_pago.gc">Pago por evento</Value>')
-            self.update_content('modalidad_pago', new_string)
+            self.update_content('modalidad_pago_con_array', new_string)
+        elif self.modalidad_pago_con_pago_por_evento.is_present:
+            new_string = self.modalidad_pago_con_pago_por_evento.original_string.replace(
+                '<Value schemeID="Pago por evento" schemeName="salud_modalidad_pago.gc"></Value>',
+                '<Value schemeID="04" schemeName="salud_modalidad_pago.gc">Pago por evento</Value>')
+            self.update_content('modalidad_pago_con_pago_por_evento', new_string)
         else:
             log.warning("\tNo fue cambiado <Value> de 'MODALIDAD_PAGO' porque no existe 'MODALIDAD_PAGO' en XML")
 
     def logic_cobertura(self):
-        if self.cobertura.is_present:
+        if self.cobertura_con_array.is_present or self.cobertura_financiado_con_upc.is_present:
             if self.evento_no_pbs.is_present:
                 text = '<Value schemeID="02" schemeName="salud_cobertura.gc">Presupuesto máximo</Value>'
             elif self.evento_pbs.is_present:
                 text = '<Value schemeID="01" schemeName="salud_cobertura.gc">Plan de beneficios en salud financiado con UPC</Value>'
             else:
                 return
-            new_string = self.cobertura.original_string.replace(
-                '<Value schemeID="Array" schemeName="salud_cobertura.gc"></Value>', text)
-            self.update_content('cobertura', new_string)
+
+            if self.cobertura_financiado_con_upc.is_present:
+                new_string = self.cobertura_financiado_con_upc.original_string.replace(
+                    '<Value schemeID="Plan de beneficios en salud financiado con UPC" schemeName="salud_cobertura.gc"></Value>',
+                    text)
+                self.update_content('cobertura_financiado_con_upc', new_string)
+            else:
+                new_string = self.cobertura_con_array.original_string.replace(
+                    '<Value schemeID="Array" schemeName="salud_cobertura.gc"></Value>', text)
+                self.update_content('cobertura_con_array', new_string)
         else:
-            log.warning("\tNo fue cambiado <Value> de 'COBERTURA_PLAN_BENEFICIOS' porque no existe 'COBERTURA_PLAN_BENEFICIOS' en XML")
+            log.warning(
+                "\tNo fue cambiado <Value> de 'COBERTURA_PLAN_BENEFICIOS' porque no existe 'COBERTURA_PLAN_BENEFICIOS' en XML")
 
     def logic_numero_contrato(self):
         if self.numero_contrato.is_present:
@@ -229,6 +255,6 @@ class XMLHealthInvoiceProcessor:
 
 if __name__ == '__main__':
     # processor = XMLHealthInvoiceProcessor("/Users/alfonso/Downloads/ad090007322301625001b31f1.xml")
-    processor = XMLHealthInvoiceProcessor("/Users/alfonso/Downloads/LGFM1538339_ad09000732230162500177923.xml")
+    processor = XMLHealthInvoiceProcessor("/Users/alfonso/Downloads/LGFM152432.xml")
     processor.process_all()
-    processor.save()
+    processor.save("/Users/alfonso/Downloads/LGFM152432_COMPLETO.xml")
