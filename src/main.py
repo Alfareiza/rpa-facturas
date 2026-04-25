@@ -9,6 +9,7 @@ from time import sleep
 from apscheduler.schedulers.blocking import BlockingScheduler
 from googleapiclient.errors import HttpError
 from pytz import timezone
+from tenacity import retry, retry_if_exception, wait_fixed, wait_sequence
 
 from src.config import log
 from src.constants import Reasons, Emails, Subjects, EMAILS_PER_EXECUTION
@@ -18,7 +19,7 @@ from src.models.google import EmailMessage
 from src.models.mutualser import FindLoadResponse
 from src.pipeline import InvoicePipeline
 from src.resources.datetimes import colombia_now, diff_dates
-from src.resources.exceptions import FacturaCargadaSinExito, DuplicatedRow
+from src.resources.exceptions import FacturaCargadaSinExito, DuplicatedRow, NoMatchesEmails
 from src.resources.files import File
 from src.services.drive import GoogleDrive, GoogleDriveLogistica
 from src.services.gmail import GmailAPIReader
@@ -230,6 +231,10 @@ class Process:
         return file_id.get('id')
 
 
+@retry(
+    retry=retry_if_exception(NoMatchesEmails),
+    wait=wait_sequence([wait_fixed(300), wait_fixed(600), wait_fixed(3600), wait_fixed(14400)])
+)
 def run_process():
     """
     Main execution function that orchestrates the entire process.
@@ -260,6 +265,8 @@ def run_process():
         log.info(f"REPORT: Última Factura fue {last_record[0]} del {last_record[1].email.momento_factura}.")
         log.info(f"REPORT: Comenzó a las {moment:%T} y le tomó {diff_dates(moment, colombia_now())} procesar"
                  f" {len(ordered_records)} correos.")
+        
+    raise NoMatchesEmails
 
     return len(ordered_records)
 
@@ -271,9 +278,7 @@ if __name__ == '__main__':
     from itertools import cycle
 
     for run in cycle([run_process]):
-        qty_processed = run()
-        if qty_processed == 0:
-            sleep(30 * 5)
+        run()
         sleep(30)
     # scheduler = BlockingScheduler(timezone=timezone("America/Bogota"))
     # scheduler.add_job(
