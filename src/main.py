@@ -233,7 +233,7 @@ class Process:
 
 @retry(
     retry=retry_if_exception(NoMatchesEmails),
-    wait=wait_chain([wait_fixed(300), wait_fixed(600), wait_fixed(3600), wait_fixed(14400)])
+    wait=wait_chain(wait_fixed(300), wait_fixed(600), wait_fixed(3600), wait_fixed(14400))
 )
 def run_process():
     """
