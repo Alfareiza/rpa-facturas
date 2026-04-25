@@ -9,7 +9,7 @@ from time import sleep
 from apscheduler.schedulers.blocking import BlockingScheduler
 from googleapiclient.errors import HttpError
 from pytz import timezone
-from tenacity import retry, retry_if_exception, wait_fixed, wait_sequence
+from tenacity import retry, retry_if_exception, wait_fixed, wait_chain
 
 from src.config import log
 from src.constants import Reasons, Emails, Subjects, EMAILS_PER_EXECUTION
@@ -233,7 +233,7 @@ class Process:
 
 @retry(
     retry=retry_if_exception(NoMatchesEmails),
-    wait=wait_sequence([wait_fixed(300), wait_fixed(600), wait_fixed(3600), wait_fixed(14400)])
+    wait=wait_chain([wait_fixed(300), wait_fixed(600), wait_fixed(3600), wait_fixed(14400)])
 )
 def run_process():
     """
