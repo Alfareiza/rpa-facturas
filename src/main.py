@@ -68,11 +68,11 @@ class Process:
             log.info(f"{7 * '⬆️'}  FIN FACTURA {message.nro_factura} del {message.dt_factura_str} {7 * '⬆️'}\n")
 
     def send_invoice_to_mutual_ser(
-        self,
-        zip_file: Path,
-        nro_factura: str,
-        *,
-        client: MutualSerAPIClient | None = None,
+            self,
+            zip_file: Path,
+            nro_factura: str,
+            *,
+            client: MutualSerAPIClient | None = None,
     ):
         """
         Uploads the invoice file attached to an email to the Mutualser API.
@@ -92,11 +92,11 @@ class Process:
             raise FacturaCargadaSinExito(response.unico_archivo.motivo_error)
 
     def process_xmls_and_pdf(
-        self,
-        message: EmailMessage,
-        *,
-        drive: GoogleDrive | None = None,
-        drive_logistica: GoogleDriveLogistica | None = None,
+            self,
+            message: EmailMessage,
+            *,
+            drive: GoogleDrive | None = None,
+            drive_logistica: GoogleDriveLogistica | None = None,
     ):
         """Perform the next actions:
         1. Upload .zip to temp folder on Google Drive.
@@ -209,12 +209,12 @@ class Process:
         return files['xml'], files['pdf']
 
     def upload_file_to_drive(
-        self,
-        file: Path,
-        folder: str,
-        *,
-        drive: GoogleDrive | None = None,
-        drive_logistica: GoogleDriveLogistica | None = None,
+            self,
+            file: Path,
+            folder: str,
+            *,
+            drive: GoogleDrive | None = None,
+            drive_logistica: GoogleDriveLogistica | None = None,
     ):
         """Upload zip file to Google Drive"""
         drive = drive or self.drive
@@ -258,8 +258,10 @@ def run_process():
         first_record = ordered_records[-1]
         log.info(f"REPORT: Primera Factura fue {first_record[0]} del {first_record[1].email.momento_factura}.")
         log.info(f"REPORT: Última Factura fue {last_record[0]} del {last_record[1].email.momento_factura}.")
-    log.info(f"REPORT: Comenzó a las {moment:%T} y le tomó {diff_dates(moment, colombia_now())} procesar"
-             f" {len(ordered_records)} correos.")
+        log.info(f"REPORT: Comenzó a las {moment:%T} y le tomó {diff_dates(moment, colombia_now())} procesar"
+                 f" {len(ordered_records)} correos.")
+
+    return len(ordered_records)
 
 
 if __name__ == '__main__':
@@ -267,17 +269,20 @@ if __name__ == '__main__':
     #     print(f"{i}. {nro}: {record.email.subject}")
     # run_process()
     from itertools import cycle
+
     for run in cycle([run_process]):
-        run()
+        qty_processed = run()
+        if qty_processed == 0:
+            sleep(30 * 5)
         sleep(30)
     # scheduler = BlockingScheduler(timezone=timezone("America/Bogota"))
     # scheduler.add_job(
     #     run_process,
     #     'cron',
-        # day_of_week='mon-sat',   # Monday to Saturday
-        # hour='6-20',             # 6:00 to 20:00 (every hour on the hour)
-        # minute=0,
-        # id='invoice_processing_job',
+    # day_of_week='mon-sat',   # Monday to Saturday
+    # hour='6-20',             # 6:00 to 20:00 (every hour on the hour)
+    # minute=0,
+    # id='invoice_processing_job',
     # )
     # Optional: run once immediately if within allowed window, then follow schedule
     # now = datetime.now(tz=timezone("America/Bogota"))
@@ -288,4 +293,3 @@ if __name__ == '__main__':
     # except (KeyboardInterrupt, SystemExit):
     #     log.info("Scheduler stopped by user.")
     #     scheduler.shutdown()
-
