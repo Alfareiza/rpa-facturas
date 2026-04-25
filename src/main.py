@@ -15,6 +15,7 @@ from src.config import log
 from src.constants import Reasons, Emails, Subjects, EMAILS_PER_EXECUTION
 from src.decorators import production_only
 from src.models.general import Run, Record
+from src.constants import GMAIL_QUERY
 from src.models.google import EmailMessage
 from src.models.mutualser import FindLoadResponse
 from src.pipeline import InvoicePipeline
@@ -230,10 +231,17 @@ class Process:
                 file_id = drive.upload_file(file, folder_id)
         return file_id.get('id')
 
+def log_retry_attempt(retry_state):
+    """Log retry attempt with the actual wait time."""
+    wait_time = retry_state.next_action.sleep
+    attempt = retry_state.attempt_number
+    log.info(f"Retry attempt #{attempt} Waiting {int(wait_time/60):.1f} minutes before next attempt...")
+
 
 @retry(
     retry=retry_if_exception(NoMatchesEmails),
-    wait=wait_chain(wait_fixed(300), wait_fixed(600), wait_fixed(3600), wait_fixed(14400))
+    wait=wait_chain(wait_fixed(300), wait_fixed(600), wait_fixed(3600), wait_fixed(14400)),
+    before_sleep=log_retry_attempt
 )
 def run_process():
     """
@@ -265,10 +273,9 @@ def run_process():
         log.info(f"REPORT: Última Factura fue {last_record[0]} del {last_record[1].email.momento_factura}.")
         log.info(f"REPORT: Comenzó a las {moment:%T} y le tomó {diff_dates(moment, colombia_now())} procesar"
                  f" {len(ordered_records)} correos.")
+        return
         
-    raise NoMatchesEmails
-
-    return len(ordered_records)
+    raise NoMatchesEmails("No se encontraron correos para procesar en {GMAIL_QUERY!r}")
 
 
 if __name__ == '__main__':
