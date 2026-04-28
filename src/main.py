@@ -12,7 +12,7 @@ from pytz import timezone
 from tenacity import retry, retry_if_exception, wait_fixed, wait_chain
 
 from src.config import log
-from src.constants import Reasons, Emails, Subjects, EMAILS_PER_EXECUTION
+from src.constants import Reasons, Emails, Subjects, EMAILS_PER_EXECUTION, FIVE_MINUTES, TEN_MINUTES
 from src.decorators import production_only
 from src.models.general import Run, Record
 from src.constants import GMAIL_QUERY
@@ -240,7 +240,7 @@ def log_retry_attempt(retry_state):
 
 @retry(
     retry=retry_if_exception(NoMatchesEmails),
-    wait=wait_chain(wait_fixed(300), wait_fixed(600), wait_fixed(3600), wait_fixed(14400)),
+    wait=wait_chain(wait_fixed(FIVE_MINUTES), wait_fixed(TEN_MINUTES), wait_fixed(3600), wait_fixed(14400)),
     before_sleep=log_retry_attempt
 )
 def run_process():
@@ -286,7 +286,7 @@ if __name__ == '__main__':
 
     for run in cycle([run_process]):
         run()
-        sleep(30)
+        sleep(TEN_MINUTES)
     # scheduler = BlockingScheduler(timezone=timezone("America/Bogota"))
     # scheduler.add_job(
     #     run_process,

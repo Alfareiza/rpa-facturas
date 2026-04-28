@@ -46,6 +46,10 @@ TABLE_FAC_PROCS = config('TABLE_FAC_PROCS')
 # Gmail
 GMAIL_QUERY = config("GMAIL_QUERY")
 
+ONE_MINUTE = 60
+FIVE_MINUTES = ONE_MINUTE * 5
+TEN_MINUTES = FIVE_MINUTES * 2
+
 class Reasons:
     FILE_NOT_FOUND_MUTUAL_SER = 'Archivo no encontrado al intentar ser enviado a Mutualser'
     UPLOADED_MUTUAL_SER = 'Cargado en Mutualser'
