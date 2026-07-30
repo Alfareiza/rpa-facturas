@@ -234,7 +234,7 @@ class Process:
             # case 'PROCESADOS':
                 # file_id = drive.upload_file(file, drive.facturas_pdf)
             case _:
-                folder_id = drive_logistica.create_or_get_folder_id(folder, parent)
+                folder_id = drive_logistica.create_or_get_folder_id(parent, folder)
                 file_id = drive.upload_file(file, folder_id)
         return file_id.get('id')
 
