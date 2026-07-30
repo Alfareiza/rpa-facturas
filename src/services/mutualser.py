@@ -25,7 +25,7 @@ from src.models.mutualser import FileLinkRequest, FileLinkResponse, UploadFilesR
 
 from src.constants import LOGI_NIT, MUTUALSER_USERNAME, MUTUALSER_PASSWORD, BASE_URL_AUTH, BASE_URL_API, PORTAL_URL, \
     USER_ID
-from src.resources.exceptions import ServiceUnavailableError
+from src.resources.exceptions import ServiceUnavailableError, TimeoutMutualSer
 from src.resources.files import extract_nro_factura_from_file
 
 
@@ -390,10 +390,15 @@ class MutualSerAPIClient:
             if attempt < max_retries - 1:
                 # log.info(f"Status is still 'EN_PROCESO'. Waiting for {delay_seconds} seconds before retrying.")
                 time.sleep(delay_seconds)
-
-        raise ValueError(f"Después de {max_retries} intentos, no se cargó la factura. "
-                         f"Último estado de API fue {resp_obj.estado_basado_en_archivos!r}. "
-                         f"El ID de Cargue es {self.transaction_id}.")
+        
+        # El ID de Cargue es {self.transaction_id}.
+        text_error = f"Después de {max_retries} intentos, no se cargó la factura. Último estado de API fue {resp_obj.estado_basado_en_archivos}."
+        match resp_obj.estado_basado_en_archivos:
+            case 'EN_PROGRESO_FE':
+                raise TimeoutMutualSer(text_error)
+            case _:
+                raise ValueError(text_error)
+        
 
     @retry(stop=stop_after_attempt(2), wait=wait_fixed(60), retry=retry_if_exception_type(ServiceUnavailableError), reraise=True)
     @production_only
@@ -416,7 +421,7 @@ class MutualSerAPIClient:
             log.info(f"{extract_nro_factura_from_file(filepath)} Archivo cargado "
                      f"con ID de cargue: {final_response.id}")
                      # f"{final_response.model_dump_json()}")
-        except (RequestException, ValueError, AttributeError) as e:
+        except (RequestException, TimeoutMutualSer, ValueError, AttributeError) as e:
             log.error(f"Could not complete the process: {e}")
             raise
         except Exception as e:

@@ -14,7 +14,7 @@ from tenacity import retry, retry_if_exception_type, wait_fixed, wait_chain
 
 from src.config import log
 from src.constants import Reasons, Emails, Subjects, EMAILS_PER_EXECUTION, FIVE_MINUTES, TEN_MINUTES
-from src.decorators import production_only
+from src.decorators import production_only, skip_if_reason
 from src.models.general import Run, Record
 from src.constants import GMAIL_QUERY
 from src.models.google import EmailMessage
@@ -180,6 +180,7 @@ class Process:
         # self.run.record[message.nro_factura].remove() # Supabase stuff
         self.send_mail(message, reason, gmail=gmail)
 
+    @skip_if_reason([Reasons.INVOCE_UPLOADED_WITH_ERROR])
     def send_mail(self, message: EmailMessage, reason: str, *, gmail: GmailAPIReader | None = None):
         """Send the email notifying the issue with the invoice."""
         subject = Subjects.define_subject(message.nro_factura, reason, message.fecha_correo_recibido)

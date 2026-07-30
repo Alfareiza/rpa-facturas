@@ -12,7 +12,7 @@ from src.config import log
 from src.constants import EMAILS_PER_EXECUTION, Reasons
 from src.models.general import Record
 from src.models.google import EmailMessage
-from src.resources.exceptions import DuplicatedRow, FacturaCargadaSinExito
+from src.resources.exceptions import DuplicatedRow, FacturaCargadaSinExito, TimeoutMutualSer
 from src.resources.log_buffer import InvoiceLogManager
 from src.services.drive import GoogleDrive, GoogleDriveLogistica
 from src.services.gmail import GmailAPIReader
@@ -312,6 +312,11 @@ class InvoicePipeline:
             self._process.send_invoice_to_mutual_ser(message.attachment_path, message.nro_factura, client=mutual)
         except FileNotFoundError:
             self._process.post_exception(message, Reasons.FILE_NOT_FOUND_MUTUAL_SER, gmail=gmail)
+            self._mark_completed(
+                CompletedItem(idx=item.idx, message=message, success=False, error_reason=Reasons.FILE_NOT_FOUND_MUTUAL_SER)
+            )
+        except TimeoutMutualSer:
+            self._process.post_exception(message, Reasons.INVOCE_UPLOADED_WITH_ERROR, gmail=gmail)
             self._mark_completed(
                 CompletedItem(idx=item.idx, message=message, success=False, error_reason=Reasons.FILE_NOT_FOUND_MUTUAL_SER)
             )
