@@ -1,5 +1,10 @@
 from decouple import config, Csv
 
+ONE_MINUTE = 60
+FIVE_MINUTES = ONE_MINUTE * 5
+TEN_MINUTES = FIVE_MINUTES * 2
+ONE_HOUR = ONE_MINUTE * 60
+
 # Business
 LOGI_NIT = config('LOGI_NIT')
 USER_ID = config('USER_ID')
