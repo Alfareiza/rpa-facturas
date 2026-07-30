@@ -1,5 +1,4 @@
 from pathlib import Path
-from sys import breakpointhook
 
 from google.oauth2.credentials import Credentials
 import googleapiclient
@@ -183,17 +182,12 @@ class GoogleDriveLogistica:
         ).execute()
         if files := response.get('files', []):
             return files[0].get('id')
-        breakpoint()
         file_metadata = {
             'name': folder_name,
             'parents': [parent],
             'mimeType': 'application/vnd.google-apps.folder'
         }
-        try:
-            folder = self.service.files().create(body=file_metadata, fields='id').execute()
-        except googleapiclient.errors.HttpError as e:
-            if 'notFound' in str(e):
-                breakpoint()
+        folder = self.service.files().create(body=file_metadata, fields='id').execute()
         return folder.get('id')
 
 
