@@ -1,6 +1,8 @@
 from pathlib import Path
+from sys import breakpointhook
 
 from google.oauth2.credentials import Credentials
+import googleapiclient
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_not_exception_type
@@ -29,9 +31,9 @@ class GoogleDrive:
         self.procesadas = FACTURAS_PROCESADAS
         self.temp = FACTURAS_TMP
 
-    def get_facturas_mes_name(self, mes: int, ano: int):
-        """"""
-        return f"FacturasMutualser_{ano}{mes:02d}"
+    def get_facturas_mes_name(self, mes: int, ano: int, prefix: str = '') -> str:
+        """Creates the name of the folder."""
+        return f"FacturasMutualser{prefix}_{ano}{mes:02d}"
 
     # @retry(stop=stop_after_attempt(10), wait=wait_fixed(1), reraise=True)
     def file_exists_in_folder(self, file_path: Path, folder_id: str, file_type = 'application/pdf') -> dict | None:
@@ -88,13 +90,14 @@ class GoogleDrive:
         Moves a file to a different folder in Google Drive.
         """
         file = self.service.files().get(fileId=file_id, fields='parents').execute()
-        previous_parents = ",".join(file.get('parents'))
-        file = self.service.files().update(
-            fileId=file_id,
-            addParents=new_folder_id,
-            removeParents=previous_parents,
-            fields='id, parents'
-        ).execute()
+        parents = file.get('parents') or []
+        update_kwargs: dict = {
+            'addParents': new_folder_id,
+            'fields': 'id, parents',
+        }
+        if parents:
+            update_kwargs['removeParents'] = ','.join(parents)
+        file = self.service.files().update(fileId=file_id, **update_kwargs).execute()
         return file
 
     @retry(stop=stop_after_attempt(10), wait=wait_fixed(1), reraise=True)
@@ -168,7 +171,7 @@ class GoogleDriveLogistica:
         self.xmls = XMLS_MUTUALSER
 
     @retry(stop=stop_after_attempt(10), wait=wait_fixed(1), reraise=True)
-    def create_or_get_folder_id(self, folder_name: str) -> str:
+    def create_or_get_folder_id(self, parent: str, folder_name: str) -> str:
         """
         Gets a folder by name or creates it if it doesn't exist.
         """
@@ -180,13 +183,17 @@ class GoogleDriveLogistica:
         ).execute()
         if files := response.get('files', []):
             return files[0].get('id')
-
+        breakpoint()
         file_metadata = {
             'name': folder_name,
-            'parents': [self.xmls],
+            'parents': [parent],
             'mimeType': 'application/vnd.google-apps.folder'
         }
-        folder = self.service.files().create(body=file_metadata, fields='id').execute()
+        try:
+            folder = self.service.files().create(body=file_metadata, fields='id').execute()
+        except googleapiclient.errors.HttpError as e:
+            if 'notFound' in str(e):
+                breakpoint()
         return folder.get('id')
 
 

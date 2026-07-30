@@ -8,8 +8,9 @@ from time import sleep
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 from googleapiclient.errors import HttpError
+from google.auth.exceptions import RefreshError
 from pytz import timezone
-from tenacity import retry, retry_if_exception, wait_fixed, wait_chain
+from tenacity import retry, retry_if_exception_type, wait_fixed, wait_chain
 
 from src.config import log
 from src.constants import Reasons, Emails, Subjects, EMAILS_PER_EXECUTION, FIVE_MINUTES, TEN_MINUTES
@@ -20,6 +21,7 @@ from src.models.google import EmailMessage
 from src.models.mutualser import FindLoadResponse
 from src.pipeline import InvoicePipeline
 from src.resources.datetimes import colombia_now, diff_dates
+from src.resources.exceptions import FacturaCargadaSinExito, DuplicatedRow, NoMatchesEmails
 from src.resources.exceptions import FacturaCargadaSinExito, DuplicatedRow, NoMatchesEmails
 from src.resources.files import File
 from src.services.drive import GoogleDrive, GoogleDriveLogistica
@@ -122,9 +124,13 @@ class Process:
             if message.dt_factura.year < 2026:
                 xml_file = File(xml_file).update_invoice()
                 message.attachment_path = File.zip_files(xml_file, pdf_file, filename=message.attachment_path.stem)
-            folder_name = drive.get_facturas_mes_name(message.received_at.date().month, message.received_at.date().year)
-            self.upload_file_to_drive(pdf_file, folder='PROCESADOS', drive=drive, drive_logistica=drive_logistica)
-            self.upload_file_to_drive(xml_file, folder=folder_name, drive=drive, drive_logistica=drive_logistica)
+            
+            folder_xml_name = drive.get_facturas_mes_name(message.received_at.date().month, message.received_at.date().year)
+            folder_pdf_name = drive.get_facturas_mes_name(message.received_at.date().month, message.received_at.date().year, prefix='PDF')
+            # FacturasMutualser -> FacturasPDF -> FacturasMutualsePDF_YYYYMM
+            self.upload_file_to_drive(pdf_file, folder_pdf_name, drive.facturas_pdf, drive=drive, drive_logistica=drive_logistica)
+            # FacturasMutualser -> XML_Mutualser -> FacturasMutualser_YYYYMM
+            self.upload_file_to_drive(xml_file, folder_xml_name, drive_logistica.xmls, drive=drive, drive_logistica=drive_logistica)
         except Exception as e:
             import traceback;
             traceback.print_exc()
@@ -214,6 +220,7 @@ class Process:
             self,
             file: Path,
             folder: str,
+            parent: str = '',
             *,
             drive: GoogleDrive | None = None,
             drive_logistica: GoogleDriveLogistica | None = None,
@@ -224,10 +231,10 @@ class Process:
         match folder:
             case 'TMP':
                 file_id = drive.upload_file(file, drive.temp)
-            case 'PROCESADOS':
-                file_id = drive.upload_file(file, drive.facturas_pdf)
+            # case 'PROCESADOS':
+                # file_id = drive.upload_file(file, drive.facturas_pdf)
             case _:
-                folder_id = drive_logistica.create_or_get_folder_id(folder)
+                folder_id = drive_logistica.create_or_get_folder_id(folder, parent)
                 file_id = drive.upload_file(file, folder_id)
         return file_id.get('id')
 
@@ -239,7 +246,7 @@ def log_retry_attempt(retry_state):
 
 
 @retry(
-    retry=retry_if_exception(NoMatchesEmails),
+    retry=retry_if_exception_type(NoMatchesEmails),
     wait=wait_chain(wait_fixed(FIVE_MINUTES), wait_fixed(TEN_MINUTES), wait_fixed(3600), wait_fixed(14400)),
     before_sleep=log_retry_attempt
 )
@@ -251,9 +258,12 @@ def run_process():
     moment = colombia_now()
     # Executed from Monday to Saturday, from 6:00:00 up to 20:59:59
     log.info("SCHEDULER: Iniciando nuevo procesamiento de facturas.")
-    p = Process()
     try:
+        p = Process()
         p.start()
+    except RefreshError as e:
+        log.error(f"Se venció el token o fue rechazado, puede ser que la contraseña haya cambiado.")
+        raise
     except Exception as e:
         import traceback;
         traceback.print_exc()
